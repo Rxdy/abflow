@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    # env_file passe les valeurs brutes sans ré-interpolation des $ (bcrypt safe)
+    env_file:
+      - .env
+    environment:
+      # Chemin interne au conteneur — écrase UPLOADS_PATH du .env
+      - UPLOADS_DIR=/uploads
+    volumes:
+      - ${UPLOADS_PATH:-./uploads}:/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_APP_NAME: ${VITE_APP_NAME:-AbFlow}
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
