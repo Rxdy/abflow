@@ -122,6 +122,8 @@ export async function createApp() {
   function anyAuth(req, res, next) {
     const h = req.headers.authorization
     if (h?.startsWith('Bearer ')) return jwtAuth(req, res, next)
+    // Allow the JWT via query param for <img>/<video>/<audio> src (can't set headers)
+    if (req.query.token) { req.headers.authorization = `Bearer ${req.query.token}`; return jwtAuth(req, res, next) }
     // Allow API key via query param for <img src="...?key=xxx"> (screensaver, etc.)
     if (req.query.key && !req.headers['x-api-key']) req.headers['x-api-key'] = req.query.key
     return apiKeyAuth(req, res, next)
