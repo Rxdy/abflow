@@ -8,10 +8,16 @@
 - [ ] **Détail fichier** — panneau avec nom complet, taille, date, type
 - [ ] **Navigation clavier lightbox** — déjà fait ✅
 - [ ] **Refresh token** — ou avertissement quand le JWT est proche d'expirer (24h)
-- [ ] **Guide de déploiement** — doc pour installer sur Raspberry Pi (docker compose, .env, reverse proxy)
 
 ## Fait ✅
 
+- [x] Tests backend (`node --test` + supertest) — auth, images, quota, share
+- [x] Tests frontend (vitest + testing-library/vue) — format, useAuth, useApi, AppHeader
+- [x] CI GitHub Actions — tests + typecheck + build sur chaque push/PR
+- [x] CD — runner self-hosted sur le Pi, déploiement auto après CI verte sur `main`
+      (voir `DEPLOY_RUNNER.md`)
+- [x] Barre de stockage restant + quota configurable (`STORAGE_QUOTA_MB`)
+- [x] Exposition publique via Tailscale Funnel
 - [x] Auth bcrypt + JWT + rate limiting
 - [x] CORS strict
 - [x] `/uploads` protégé (auth requise)
