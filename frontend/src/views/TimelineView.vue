@@ -70,7 +70,7 @@
               :class="{ 'file-cell--selected': selected.has(f.filename) }"
               @click="onCellClick(f)"
             >
-              <img :src="f.url" :alt="f.filename" loading="lazy" />
+              <img :src="mediaUrl(f.url)" :alt="f.filename" loading="lazy" />
               <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
@@ -150,7 +150,7 @@
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <img :src="lightbox.url" :alt="lightbox.filename" class="lb-img" />
+        <img :src="mediaUrl(lightbox.url)" :alt="lightbox.filename" class="lb-img" />
         <button v-if="lightboxIndex < imageFiles.length - 1" class="lb-nav lb-next" @click="navLightbox(1)">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -187,12 +187,12 @@
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
-        <video v-if="mediaFile.fileType === 'video'" :src="mediaFile.url"
+        <video v-if="mediaFile.fileType === 'video'" :src="mediaUrl(mediaFile.url)"
           class="lb-media" controls autoplay />
-        <audio v-else-if="mediaFile.fileType === 'audio'" :src="mediaFile.url"
+        <audio v-else-if="mediaFile.fileType === 'audio'" :src="mediaUrl(mediaFile.url)"
           class="lb-audio" controls autoplay />
         <iframe v-else-if="mediaFile.fileType === 'document' && mediaFile.filename.endsWith('.pdf')"
-          :src="mediaFile.url" class="lb-pdf" />
+          :src="mediaUrl(mediaFile.url)" class="lb-pdf" />
         <div v-else class="lb-unsupported">
           <p>{{ cleanName(mediaFile.filename) }}</p>
           <button class="btn-dl-big" @click="downloadFile(mediaFile.filename, mediaFile.url)">
@@ -249,7 +249,7 @@ import { RouterLink } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import type { FileEntry, FileType } from '../types'
 
-const { getImages, deleteImages, downloadFile, createShareLink } = useApi()
+const { getImages, deleteImages, downloadFile, createShareLink, mediaUrl } = useApi()
 
 const LIMIT = 50
 

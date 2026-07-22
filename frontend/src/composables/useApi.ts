@@ -2,7 +2,14 @@ import { useAuth } from './useAuth'
 import type { FileEntry, ImagesResponse, Stats } from '../types'
 
 export function useApi() {
-  const { authHeaders, logout } = useAuth()
+  const { authHeaders, logout, token } = useAuth()
+
+  // <img>/<video>/<audio>/<iframe> ne peuvent pas envoyer l'en-tête Authorization —
+  // le token est passé en query param, accepté par le backend sur /uploads/:filename.
+  function mediaUrl(url: string): string {
+    if (!token.value) return url
+    return `${url}${url.includes('?') ? '&' : '?'}token=${token.value}`
+  }
 
   async function request(
     method: string,
@@ -112,5 +119,5 @@ export function useApi() {
     return data
   }
 
-  return { getImages, uploadImage, uploadImageWithProgress, deleteImages, getStats, downloadFile, createShareLink }
+  return { getImages, uploadImage, uploadImageWithProgress, deleteImages, getStats, downloadFile, createShareLink, mediaUrl }
 }

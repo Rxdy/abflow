@@ -9,9 +9,10 @@ const getImages = vi.fn()
 const deleteImages = vi.fn()
 const downloadFile = vi.fn()
 const createShareLink = vi.fn()
+const mediaUrl = vi.fn((url: string) => url)
 
 vi.mock('../../src/composables/useApi', () => ({
-  useApi: () => ({ getImages, deleteImages, downloadFile, createShareLink }),
+  useApi: () => ({ getImages, deleteImages, downloadFile, createShareLink, mediaUrl }),
 }))
 
 function makeFile(overrides: Partial<FileEntry> = {}): FileEntry {

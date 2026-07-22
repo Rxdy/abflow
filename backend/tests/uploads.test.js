@@ -48,6 +48,17 @@ describe('GET /uploads/:filename (anyAuth)', () => {
     assert.equal(res.text, 'raw-bytes')
   })
 
+  test('serves the file with the JWT passed as a ?token= query param (for <img> tags)', async () => {
+    const res = await request(ctx.app).get(`/uploads/${filename}?token=${token}`)
+    assert.equal(res.status, 200)
+    assert.equal(res.text, 'raw-bytes')
+  })
+
+  test('rejects an invalid ?token=', async () => {
+    const res = await request(ctx.app).get(`/uploads/${filename}?token=not-a-real-jwt`)
+    assert.equal(res.status, 401)
+  })
+
   test('rejects an invalid API key', async () => {
     const res = await request(ctx.app)
       .get(`/uploads/${filename}`)
