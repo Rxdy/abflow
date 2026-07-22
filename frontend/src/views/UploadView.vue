@@ -110,9 +110,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useApi } from '../composables/useApi'
-import type { Stats, FileType } from '../types'
+import { useStats } from '../composables/useStats'
+import { formatSize } from '../utils/format'
+import type { FileType } from '../types'
 
-const { uploadImageWithProgress, getStats } = useApi()
+const { uploadImageWithProgress } = useApi()
+const { stats, refreshStats } = useStats()
 
 const FILE_TYPES: Record<FileType, RegExp> = {
   image:    /\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff|avif|heic|heif)$/i,
@@ -150,7 +153,6 @@ const isDragging = ref(false)
 const uploading  = ref(false)
 const errorMsg   = ref('')
 const successMsg = ref('')
-const stats      = ref<Stats | null>(null)
 const queue      = ref<QueueItem[]>([])
 
 const pendingCount = computed(() => queue.value.filter(i => i.status === 'pending').length)
@@ -221,13 +223,7 @@ async function doUpload(): Promise<void> {
     ? '1 fichier publié !'
     : `${doneCount} fichiers publiés !`
   setTimeout(() => { successMsg.value = '' }, 3000)
-  stats.value = await getStats()
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' o'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo'
+  await refreshStats()
 }
 
 // Avertir si on quitte la page pendant un upload en cours
@@ -236,7 +232,7 @@ function onBeforeUnload(e: BeforeUnloadEvent): void {
 }
 
 onMounted(async () => {
-  stats.value = await getStats()
+  await refreshStats()
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 onBeforeUnmount(() => {
