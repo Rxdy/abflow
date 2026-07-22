@@ -91,4 +91,167 @@ describe('useApi', () => {
     const stats = await api.getStats()
     expect(stats).toEqual({ count: 3, totalSize: 1024, byType: { image: 3 }, quotaBytes: 2_000_000_000 })
   })
+
+  it('deleteImages posts the filenames and returns deleted/errors', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_5' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ deleted: ['a.jpg'], errors: ['ghost.jpg'] }),
+    })
+
+    const result = await api.deleteImages(['a.jpg', 'ghost.jpg'])
+
+    const [url, opts] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/images')
+    expect(opts.method).toBe('DELETE')
+    expect(JSON.parse(opts.body)).toEqual({ filenames: ['a.jpg', 'ghost.jpg'] })
+    expect(result).toEqual({ deleted: ['a.jpg'], errors: ['ghost.jpg'] })
+  })
+
+  it('deleteImages throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_6' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 })
+    await expect(api.deleteImages(['a.jpg'])).rejects.toThrow('Erreur suppression')
+  })
+
+  it('createShareLink posts the filename and returns the share URL', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_7' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ url: '/share/abc', expiresAt: 123456 }),
+    })
+
+    const result = await api.createShareLink('photo.jpg')
+
+    const [url, opts] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/share')
+    expect(JSON.parse(opts.body)).toEqual({ filename: 'photo.jpg' })
+    expect(result).toEqual({ url: '/share/abc', expiresAt: 123456 })
+  })
+
+  it('createShareLink throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_8' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+    await expect(api.createShareLink('ghost.jpg')).rejects.toThrow('Erreur création lien')
+  })
+
+  it('downloadFile fetches the blob and triggers a browser download', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_9' }) })
+    await auth.login('admin', 'secret')
+
+    const blob = new Blob(['content'])
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => blob })
+
+    const createObjectURL = vi.fn(() => 'blob:mock-url')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    await api.downloadFile('photo.jpg', '/uploads/photo.jpg')
+
+    expect(createObjectURL).toHaveBeenCalledWith(blob)
+    expect(clickSpy).toHaveBeenCalledOnce()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+
+    clickSpy.mockRestore()
+  })
+
+  it('downloadFile throws when the response is not ok', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_10' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+    await expect(api.downloadFile('ghost.jpg', '/uploads/ghost.jpg')).rejects.toThrow('404')
+  })
+
+  it('uploadImageWithProgress reports progress and resolves with the uploaded file', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_11' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn((event: string, cb: (e: unknown) => void) => {
+        if (event === 'progress') this.onProgress = cb
+      }) }
+      onProgress?: (e: { lengthComputable: boolean; loaded: number; total: number }) => void
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const progressUpdates: number[] = []
+    const uploadPromise = api.uploadImageWithProgress(
+      new File(['data'], 'photo.jpg'),
+      (pct) => progressUpdates.push(pct),
+    )
+
+    const xhr = FakeXHR.instances[0]
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer tok_11')
+    xhr.onProgress?.({ lengthComputable: true, loaded: 50, total: 100 })
+
+    xhr.status = 201
+    xhr.responseText = JSON.stringify({ filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 4, uploadedAt: 1, fileType: 'image' })
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    const result = await uploadPromise
+    expect(progressUpdates).toEqual([50])
+    expect(result.filename).toBe('gen.jpg')
+  })
+
+  it('uploadImageWithProgress rejects on a network error', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_12' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'photo.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.listeners['error']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Erreur réseau')
+  })
 })
