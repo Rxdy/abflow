@@ -17,6 +17,7 @@ services:
       context: ./frontend
       args:
         VITE_APP_NAME: ${VITE_APP_NAME:-AbFlow}
+        VITE_INSTANCE_NAME: ${VITE_INSTANCE_NAME:-}
     ports:
       - "8080:80"
     depends_on:
