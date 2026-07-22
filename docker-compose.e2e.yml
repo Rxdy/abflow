@@ -1,0 +1,16 @@
+# Override pour la stack jetable e2e (Playwright).
+# `env_file: .env` du service backend charge toujours le vrai .env — ces clés
+# explicites le remplacent (environment a priorité sur env_file) pour garantir
+# des identifiants de test fixes, indépendants du .env réel de la machine.
+# Le port et le dossier d'uploads restent paramétrés via .env.e2e (FRONTEND_PORT,
+# UPLOADS_PATH), qui n'affecte que l'interpolation ${...} du docker-compose.yml.
+# Usage : voir `make e2e`.
+
+services:
+  backend:
+    environment:
+      - AUTH_USERNAME=e2e
+      - AUTH_PASSWORD=e2e_test_password_123
+      - JWT_SECRET=e2e_test_jwt_secret_not_for_production_use_only
+      - CORS_ORIGIN=http://localhost:8099
+      - STORAGE_TYPE=local
