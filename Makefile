@@ -1,4 +1,4 @@
-.PHONY: help up down dev https status funnel
+.PHONY: help up down dev https status funnel e2e e2e-down
 
 help:
 	@echo "Commands:"
@@ -8,6 +8,8 @@ help:
 	@echo "  make down     Stop containers"
 	@echo "  make status   Show each service status and the frontend URL"
 	@echo "  make funnel   Expose the app publicly via Tailscale Funnel (port 8080)"
+	@echo "  make e2e      Start an isolated stack (port 8099) and run the Playwright e2e suite"
+	@echo "  make e2e-down Stop and remove the e2e stack"
 
 dev:
 	@echo "→ Démarrage backend Docker + Vite dev server…"
@@ -42,3 +44,15 @@ services: status
 funnel:
 	sudo tailscale funnel --bg 8080
 	tailscale funnel status
+
+e2e:
+	@mkdir -p /tmp/abflow-e2e-uploads
+	@docker run --rm -v /tmp/abflow-e2e-uploads:/data alpine sh -c 'rm -rf /data/*'
+	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+	@status=0; \
+	(cd frontend && E2E_BASE_URL=http://localhost:8099 npx playwright test) || status=$$?; \
+	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml down; \
+	exit $$status
+
+e2e-down:
+	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml down
