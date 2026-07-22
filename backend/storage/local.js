@@ -55,4 +55,13 @@ export class LocalStorage {
   pipe(filename, res) {
     res.sendFile(path.join(this.dir, filename))
   }
+
+  readTextFile(name) {
+    const p = path.join(this.dir, name)
+    return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
+  }
+
+  writeTextFile(name, content) {
+    fs.writeFileSync(path.join(this.dir, name), content, 'utf8')
+  }
 }

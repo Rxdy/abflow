@@ -86,6 +86,12 @@ export function useApi() {
     })
   }
 
+  async function renameFile(filename: string, displayName: string): Promise<{ displayName: string | null }> {
+    const res = await request('PATCH', `/api/images/${filename}`, { displayName })
+    if (!res?.ok) throw new Error('Erreur renommage')
+    return res.json() as Promise<{ displayName: string | null }>
+  }
+
   async function deleteImages(
     filenames: string[],
   ): Promise<{ deleted: string[]; errors: string[] }> {
@@ -119,5 +125,5 @@ export function useApi() {
     return data
   }
 
-  return { getImages, uploadImage, uploadImageWithProgress, deleteImages, getStats, downloadFile, createShareLink, mediaUrl }
+  return { getImages, uploadImage, uploadImageWithProgress, deleteImages, renameFile, getStats, downloadFile, createShareLink, mediaUrl }
 }

@@ -68,6 +68,18 @@ export async function createApp() {
     credentials: true,
   }
 
+  // ── Noms d'affichage personnalisés (le fichier physique n'est jamais renommé) ──
+  const NAMES_FILE = '.display-names.json'
+  let displayNames = new Map()
+  try {
+    const raw = await Promise.resolve(storage.readTextFile(NAMES_FILE))
+    if (raw) displayNames = new Map(Object.entries(JSON.parse(raw)))
+  } catch { /* fichier absent ou corrompu — on repart d'une map vide */ }
+
+  async function saveDisplayNames() {
+    await Promise.resolve(storage.writeTextFile(NAMES_FILE, JSON.stringify(Object.fromEntries(displayNames))))
+  }
+
   async function listFiles() {
     const raw = await Promise.resolve(storage.listFiles())
     return raw.map(f => ({
@@ -76,6 +88,7 @@ export async function createApp() {
       uploadedAt: f.uploadedAt,
       size: f.size,
       fileType: getFileType(f.filename),
+      displayName: displayNames.get(f.filename) ?? null,
     }))
   }
 
@@ -156,7 +169,18 @@ export async function createApp() {
     const exists = await Promise.resolve(storage.exists(filename))
     if (!exists) return res.status(404).json({ error: 'Not found' })
     const info = await Promise.resolve(storage.stat(filename))
-    res.json({ filename, url: `/uploads/${filename}`, ...info, fileType: getFileType(filename) })
+    res.json({ filename, url: `/uploads/${filename}`, ...info, fileType: getFileType(filename), displayName: displayNames.get(filename) ?? null })
+  })
+
+  app.patch('/api/images/:filename', jwtAuth, async (req, res) => {
+    const filename = path.basename(req.params.filename)
+    const exists = await Promise.resolve(storage.exists(filename))
+    if (!exists) return res.status(404).json({ error: 'Not found' })
+    const displayName = typeof req.body?.displayName === 'string' ? req.body.displayName.trim().slice(0, 200) : ''
+    if (displayName) displayNames.set(filename, displayName)
+    else displayNames.delete(filename)
+    await saveDisplayNames()
+    res.json({ filename, displayName: displayName || null })
   })
 
   app.delete('/api/images', jwtAuth, async (req, res) => {
@@ -167,9 +191,10 @@ export async function createApp() {
     for (const raw of filenames) {
       const name = path.basename(raw)
       const exists = await Promise.resolve(storage.exists(name))
-      if (exists) { await Promise.resolve(storage.delete(name)); deleted.push(name) }
+      if (exists) { await Promise.resolve(storage.delete(name)); displayNames.delete(name); deleted.push(name) }
       else errors.push(name)
     }
+    if (deleted.length > 0) await saveDisplayNames()
     res.json({ deleted, errors })
   })
 
@@ -178,6 +203,8 @@ export async function createApp() {
     const exists = await Promise.resolve(storage.exists(filename))
     if (!exists) return res.status(404).json({ error: 'Not found' })
     await Promise.resolve(storage.delete(filename))
+    displayNames.delete(filename)
+    await saveDisplayNames()
     res.status(204).end()
   })
 
@@ -229,6 +256,7 @@ export async function createApp() {
         uploadedAt,
         size,
         fileType: getFileType(filename),
+        displayName: null,
       })
     } catch (err) {
       res.status(500).json({ error: err.message })
