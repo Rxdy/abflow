@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
+import fs from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { createStorage } from './storage/index.js'
 
@@ -203,13 +204,20 @@ export async function createApp() {
   // ── Upload ───────────────────────────────────────────────────────────────────
   app.post('/api/images/upload', jwtAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-    if (BLOCKED_EXT.test(req.file.originalname) || BLOCKED_MIME.test(req.file.mimetype))
+    if (BLOCKED_EXT.test(req.file.originalname) || BLOCKED_MIME.test(req.file.mimetype)) {
+      // multer a déjà écrit le fichier sur le disque local (y compris pour le backend
+      // SFTP, qui passe par un tmpdir) avant qu'on puisse inspecter son type — il faut
+      // le supprimer explicitement, sinon il reste orphelin et compte dans le quota.
+      await fs.unlink(req.file.path).catch(() => {})
       return res.status(415).json({ error: 'Type de fichier non autorisé' })
+    }
     if (QUOTA_BYTES !== null) {
       const files = await listFiles()
       const used = files.reduce((s, f) => s + f.size, 0)
-      if (used + req.file.size > QUOTA_BYTES)
+      if (used + req.file.size > QUOTA_BYTES) {
+        await fs.unlink(req.file.path).catch(() => {})
         return res.status(413).json({ error: `Quota dépassé (max ${process.env.STORAGE_QUOTA_MB} Mo)` })
+      }
     }
     try {
       const { filename, size, uploadedAt } = await storage.saveUploadedFile(req)
