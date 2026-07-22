@@ -71,7 +71,7 @@
               @click="onCellClick(f)"
             >
               <img :src="f.url" :alt="f.filename" loading="lazy" />
-              <div v-if="selected.size > 0" class="cell-checkbox">
+              <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
                     width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white"
@@ -112,7 +112,7 @@
                   <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
                 </svg>
               </button>
-              <div class="doc-checkbox">
+              <div class="doc-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
                     width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white"
@@ -574,7 +574,7 @@ onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
 .file-cell--selected { outline: 2.5px solid #6366f1; outline-offset: -2.5px; }
 .file-cell--selected img { opacity: .7; }
 
-.cell-checkbox { position: absolute; top: .3rem; left: .3rem; }
+.cell-checkbox { position: absolute; top: .3rem; left: .3rem; padding: .2rem; }
 .checkbox {
   width: 1.125rem; height: 1.125rem; border-radius: 50%;
   border: 2px solid rgba(255,255,255,.5); background: rgba(15,23,42,.5);
