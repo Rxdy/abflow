@@ -9,7 +9,6 @@
           <polyline points="16 17 21 12 16 7"/>
           <line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
-        <span class="app-header-logout-label">Déconnexion</span>
       </button>
     </div>
     <div v-if="storagePct !== null" class="storage-bar" :title="storageLabel">
@@ -117,14 +116,13 @@ const storageLabel = computed(() => {
 .app-header-logout {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.4375rem 0.75rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
   color: #64748b;
-  font-size: 0.8125rem;
-  font-family: inherit;
   cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -133,9 +131,5 @@ const storageLabel = computed(() => {
 .app-header-logout:hover {
   color: #f87171;
   border-color: rgba(248, 113, 113, 0.3);
-}
-
-@media (max-width: 360px) {
-  .app-header-logout-label { display: none; }
 }
 </style>
