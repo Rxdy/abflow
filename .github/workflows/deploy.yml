@@ -1,0 +1,26 @@
+name: Deploy
+
+# Se déclenche seulement quand le workflow CI a terminé avec succès sur main —
+# garantit qu'on ne déploie jamais du code dont les tests ont échoué.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, raspberry-pi]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # ne pas nettoyer les fichiers non trackés — le .env (secrets, quota, etc.)
+          # vit uniquement sur le Pi et ne doit jamais être touché par le checkout
+          clean: false
+
+      - name: Build & restart
+        run: docker compose up -d --build
+
+      - name: Nettoyage des anciennes images
+        run: docker image prune -f

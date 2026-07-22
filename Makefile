@@ -1,4 +1,4 @@
-.PHONY: help up down dev https status
+.PHONY: help up down dev https status funnel
 
 help:
 	@echo "Commands:"
@@ -7,6 +7,7 @@ help:
 	@echo "  make https    Generate self-signed cert + start with HTTPS"
 	@echo "  make down     Stop containers"
 	@echo "  make status   Show each service status and the frontend URL"
+	@echo "  make funnel   Expose the app publicly via Tailscale Funnel (port 8080)"
 
 dev:
 	@echo "→ Démarrage backend Docker + Vite dev server…"
@@ -37,3 +38,7 @@ status:
 	echo "URL: http://localhost:8080"
 
 services: status
+
+funnel:
+	sudo tailscale funnel --bg 8080
+	tailscale funnel status
