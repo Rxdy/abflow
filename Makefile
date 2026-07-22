@@ -46,6 +46,7 @@ funnel:
 	tailscale funnel status
 
 e2e:
+	@touch .env
 	@mkdir -p /tmp/abflow-e2e-uploads
 	@docker run --rm -v /tmp/abflow-e2e-uploads:/data alpine sh -c 'rm -rf /data/*'
 	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
