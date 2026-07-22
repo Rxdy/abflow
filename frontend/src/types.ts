@@ -19,4 +19,5 @@ export interface Stats {
   count: number
   totalSize: number
   byType: Partial<Record<FileType, number>>
+  quotaBytes: number | null
 }

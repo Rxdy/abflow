@@ -182,7 +182,12 @@ export async function createApp() {
     const files = await listFiles()
     const byType = {}
     for (const f of files) byType[f.fileType] = (byType[f.fileType] ?? 0) + 1
-    res.json({ count: files.length, totalSize: files.reduce((s, f) => s + f.size, 0), byType })
+    res.json({
+      count: files.length,
+      totalSize: files.reduce((s, f) => s + f.size, 0),
+      byType,
+      quotaBytes: QUOTA_BYTES,
+    })
   })
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }))
