@@ -3,6 +3,7 @@
     <div class="login-card">
       <div class="brand">
         <h1 class="brand-name">{{ appName }}</h1>
+        <p v-if="instanceName" class="brand-instance">{{ instanceName }}</p>
         <p class="brand-sub">Accès privé</p>
       </div>
 
@@ -53,6 +54,7 @@ import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
 const appName = import.meta.env.VITE_APP_NAME || 'AbFlow'
+const instanceName = import.meta.env.VITE_INSTANCE_NAME
 
 const { login } = useAuth()
 const route = useRoute()
@@ -118,6 +120,15 @@ async function handleSubmit(): Promise<void> {
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: -0.03em;
+}
+
+.brand-instance {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6366f1;
 }
 
 .brand-sub {
