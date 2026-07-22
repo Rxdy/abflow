@@ -6,6 +6,7 @@ export interface FileEntry {
   uploadedAt: number
   size: number
   fileType: FileType
+  displayName: string | null
 }
 
 export interface ImagesResponse {

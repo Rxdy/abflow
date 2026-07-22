@@ -10,9 +10,10 @@ const deleteImages = vi.fn()
 const downloadFile = vi.fn()
 const createShareLink = vi.fn()
 const mediaUrl = vi.fn((url: string) => url)
+const renameFile = vi.fn()
 
 vi.mock('../../src/composables/useApi', () => ({
-  useApi: () => ({ getImages, deleteImages, downloadFile, createShareLink, mediaUrl }),
+  useApi: () => ({ getImages, deleteImages, downloadFile, createShareLink, mediaUrl, renameFile }),
 }))
 
 function makeFile(overrides: Partial<FileEntry> = {}): FileEntry {
@@ -22,6 +23,7 @@ function makeFile(overrides: Partial<FileEntry> = {}): FileEntry {
     uploadedAt: Date.now(),
     size: 1024,
     fileType: 'image',
+    displayName: null,
     ...overrides,
   }
 }
@@ -211,6 +213,23 @@ describe('TimelineView', () => {
     expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${window.location.origin}/share/xyz`)
     await waitFor(() => expect(screen.getByText('Lien copié !')).toBeTruthy())
+  })
+
+  it('renames a file and displays the custom name afterwards', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    renameFile.mockResolvedValue({ displayName: 'Facture juillet' })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(screen.getByTitle('Renommer'))
+    const input = document.querySelector('.rename-input') as HTMLInputElement
+    await fireEvent.update(input, 'Facture juillet')
+    await fireEvent.click(screen.getByText('Enregistrer'))
+    await flushPromises()
+
+    expect(renameFile).toHaveBeenCalledWith(files[0].filename, 'Facture juillet')
+    expect(screen.getByText('Facture juillet')).toBeTruthy()
   })
 
   it('calls downloadFile when clicking the download button', async () => {

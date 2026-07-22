@@ -71,7 +71,7 @@ export class SFTPStorage {
   async listFiles() {
     const entries = await this._withClient(c => c.list(this.remotePath))
     return entries
-      .filter(e => e.type === '-')
+      .filter(e => e.type === '-' && !e.name.startsWith('.'))
       .map(e => ({
         filename: e.name,
         size: e.size,
@@ -100,5 +100,17 @@ export class SFTPStorage {
     )
     stream.on('error', () => res.status(500).end())
     stream.pipe(res)
+  }
+
+  async readTextFile(name) {
+    const remote = `${this.remotePath}/${name}`
+    const exists = await this._withClient(c => c.exists(remote))
+    if (!exists) return null
+    const buf = await this._withClient(c => c.get(remote))
+    return buf.toString('utf8')
+  }
+
+  async writeTextFile(name, content) {
+    await this._withClient(c => c.put(Buffer.from(content, 'utf8'), `${this.remotePath}/${name}`))
   }
 }

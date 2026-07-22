@@ -70,7 +70,7 @@
               :class="{ 'file-cell--selected': selected.has(f.filename) }"
               @click="onCellClick(f)"
             >
-              <img :src="mediaUrl(f.url)" :alt="f.filename" loading="lazy" />
+              <img :src="mediaUrl(f.url)" :alt="displayNameOf(f)" loading="lazy" />
               <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
@@ -94,9 +94,15 @@
             >
               <div class="doc-icon" :class="`doc-icon--${f.fileType}`">{{ typeIcon(f.fileType) }}</div>
               <div class="doc-info">
-                <span class="doc-name">{{ cleanName(f.filename) }}</span>
+                <span class="doc-name">{{ displayNameOf(f) }}</span>
                 <span class="doc-meta">{{ ext(f.filename) }} · {{ formatSize(f.size) }}</span>
               </div>
+              <button class="doc-dl" title="Renommer" @click.stop="openRename(f)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                </svg>
+              </button>
               <button class="doc-dl" title="Partager" @click.stop="shareFile(f)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -150,7 +156,7 @@
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <img :src="mediaUrl(lightbox.url)" :alt="lightbox.filename" class="lb-img" />
+        <img :src="mediaUrl(lightbox.url)" :alt="displayNameOf(lightbox)" class="lb-img" />
         <button v-if="lightboxIndex < imageFiles.length - 1" class="lb-nav lb-next" @click="navLightbox(1)">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -160,6 +166,12 @@
         <div class="lb-info">
           <span class="lb-date">{{ formatDateTime(lightbox.uploadedAt) }}</span>
           <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ imageFiles.length }}</span>
+          <button class="lb-dl" title="Renommer" @click="openRename(lightbox)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
           <button class="lb-dl" title="Partager" @click="shareFile(lightbox)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -194,14 +206,20 @@
         <iframe v-else-if="mediaFile.fileType === 'document' && mediaFile.filename.endsWith('.pdf')"
           :src="mediaUrl(mediaFile.url)" class="lb-pdf" />
         <div v-else class="lb-unsupported">
-          <p>{{ cleanName(mediaFile.filename) }}</p>
+          <p>{{ displayNameOf(mediaFile) }}</p>
           <button class="btn-dl-big" @click="downloadFile(mediaFile.filename, mediaFile.url)">
             Télécharger
           </button>
         </div>
         <div class="lb-info">
-          <span class="lb-date">{{ cleanName(mediaFile.filename) }}</span>
+          <span class="lb-date">{{ displayNameOf(mediaFile) }}</span>
           <span class="lb-counter">{{ formatSize(mediaFile.size) }}</span>
+          <button class="lb-dl" title="Renommer" @click="openRename(mediaFile)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
           <button class="lb-dl" title="Partager" @click="shareFile(mediaFile)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -236,6 +254,31 @@
         </div>
       </div>
     </Teleport>
+    <!-- Rename dialog -->
+    <Teleport to="body">
+      <div v-if="renameTarget" class="dialog-overlay" @click.self="renameTarget = null">
+        <div class="dialog">
+          <h3 class="dialog-title">Renommer</h3>
+          <input
+            v-model="renameValue"
+            class="rename-input"
+            type="text"
+            maxlength="200"
+            :disabled="renaming"
+            @keyup.enter="doRename"
+          />
+          <p v-if="renameError" class="error-msg" role="alert">{{ renameError }}</p>
+          <div class="dialog-actions">
+            <button class="btn-save" :disabled="renaming" @click="doRename">
+              <span v-if="renaming" class="spinner-sm"></span>
+              {{ renaming ? 'Enregistrement…' : 'Enregistrer' }}
+            </button>
+            <button class="btn-ghost" @click="renameTarget = null">Annuler</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Copy toast -->
     <Teleport to="body">
       <div v-if="copyToast" class="copy-toast">{{ copyToast }}</div>
@@ -249,7 +292,7 @@ import { RouterLink } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import type { FileEntry, FileType } from '../types'
 
-const { getImages, deleteImages, downloadFile, createShareLink, mediaUrl } = useApi()
+const { getImages, deleteImages, downloadFile, createShareLink, mediaUrl, renameFile } = useApi()
 
 const LIMIT = 50
 
@@ -288,6 +331,10 @@ const mediaFile     = ref<FileEntry | null>(null)
 const showConfirm   = ref(false)
 const deleting      = ref(false)
 const copyToast     = ref('')
+const renameTarget  = ref<FileEntry | null>(null)
+const renameValue   = ref('')
+const renaming      = ref(false)
+const renameError   = ref('')
 
 const hasMore    = computed(() => allFiles.value.length < total.value)
 const imageFiles = computed(() => allFiles.value.filter(f => f.fileType === 'image'))
@@ -381,6 +428,30 @@ function ext(filename: string): string { return filename.split('.').pop()?.toUpp
 function cleanName(filename: string): string {
   const name = filename.replace(/^\d+-[a-f0-9]+-/, '').replace(/\.[^.]+$/, '')
   return name.length > 30 ? name.slice(0, 28) + '…' : name
+}
+function displayNameOf(f: FileEntry): string {
+  return f.displayName || cleanName(f.filename)
+}
+
+function openRename(f: FileEntry): void {
+  renameTarget.value = f
+  renameValue.value = f.displayName ?? cleanName(f.filename)
+  renameError.value = ''
+}
+
+async function doRename(): Promise<void> {
+  if (!renameTarget.value || renaming.value) return
+  renaming.value = true
+  renameError.value = ''
+  try {
+    const { displayName } = await renameFile(renameTarget.value.filename, renameValue.value)
+    renameTarget.value.displayName = displayName
+    renameTarget.value = null
+  } catch (e) {
+    renameError.value = (e as Error).message
+  } finally {
+    renaming.value = false
+  }
 }
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' o'
@@ -692,6 +763,18 @@ onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
   color: #fff; font-size: .9375rem; font-weight: 600; font-family: inherit; cursor: pointer;
 }
 .btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+.rename-input {
+  padding: .8125rem 1rem; background: #0f172a; border: 1.5px solid rgba(255,255,255,.08);
+  border-radius: .75rem; color: #f8fafc; font-size: 1rem; font-family: inherit; outline: none;
+}
+.rename-input:focus { border-color: #6366f1; }
+.rename-input:disabled { opacity: .5; }
+.btn-save {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: .375rem;
+  padding: .75rem; background: #6366f1; border: none; border-radius: .75rem;
+  color: #fff; font-size: .9375rem; font-weight: 600; font-family: inherit; cursor: pointer;
+}
+.btn-save:disabled { opacity: .6; cursor: not-allowed; }
 .btn-ghost {
   flex: 1; padding: .75rem; background: transparent; border: 1px solid rgba(255,255,255,.1);
   border-radius: .75rem; color: #64748b; font-size: .9375rem; font-family: inherit; cursor: pointer;
