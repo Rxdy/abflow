@@ -80,11 +80,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Pas de build multi-stage --platform=$BUILDPLATFORM ici (contrairement à
-      # charlene) : les Dockerfiles backend/frontend exécutent npm install/build
-      # directement dans l'étape finale, donc l'émulation QEMU est nécessaire
-      # pour produire une image arm64 (le Pi qui héberge le site) depuis un
-      # runner GitHub amd64.
+      # Le frontend build (npm install + vue-tsc + vite build) tourne maintenant
+      # nativement sur le runner amd64 grâce à --platform=$BUILDPLATFORM dans
+      # frontend/Dockerfile — sans ça, buildx exécutait tout ce travail CPU sous
+      # émulation QEMU arm64, ce qui faisait passer le job de ~1 min à 13+ min
+      # (les artefacts produits — HTML/CSS/JS statiques — sont indépendants de
+      # l'architecture, donc rien n'empêchait de les construire nativement).
+      # Le backend garde un Dockerfile single-stage classique (donc toujours
+      # sous QEMU) : ses dépendances sont assez légères pour que ça reste rapide
+      # (~30-40s), et certaines (ssh2 notamment) ont des modules natifs optionnels
+      # qu'il vaut mieux compiler pour la bonne architecture dès l'install plutôt
+      # que de risquer un mismatch amd64/arm64 avec le même trick multi-stage.
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
