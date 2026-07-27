@@ -26,8 +26,10 @@ test('login -> upload -> apparaît dans la timeline -> suppression', async ({ pa
   await expect(cell).toHaveCount(1)
 
   await cell.locator('.cell-checkbox').click()
-  await page.locator('.btn-delete-sel').click()
-  await page.getByRole('button', { name: 'Supprimer' }).click()
+  await page.locator('.selection-bar .sel-delete').click()
+  // Deux boutons "Supprimer" sont visibles en même temps ici — celui de la
+  // barre de sélection (derrière) et celui de la modal de confirmation.
+  await page.locator('.dialog .btn-danger').click()
 
   await expect(page.getByText('Aucun fichier.')).toBeVisible()
 })
