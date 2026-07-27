@@ -64,7 +64,10 @@ describe('UploadView', () => {
   it('uploads pending files and shows a success message', async () => {
     uploadImageWithProgress.mockImplementation(async (_file: File, onProgress: (pct: number) => void) => {
       onProgress(100)
-      return { filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 100, uploadedAt: 1, fileType: 'image', displayName: null }
+      return {
+        filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 100, uploadedAt: 1, fileType: 'image',
+        displayName: null, originalName: null, mimeType: null, width: null, height: null,
+      }
     })
     render(UploadView)
     await fireEvent.change(getFileInput(), { target: { files: [makeFile('a.jpg', 100)] } })

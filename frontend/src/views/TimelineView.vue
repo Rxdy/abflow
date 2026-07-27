@@ -8,18 +8,36 @@
           <option value="name">Nom</option>
           <option value="size">Taille</option>
         </select>
+        <button class="btn-refresh" title="Rafraîchir" :disabled="refreshing" @click="load">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            :class="{ 'icon-spin': refreshing }">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
       </div>
-      <div class="header-actions" v-if="selected.size > 0">
-        <button class="btn-delete-sel" @click="showConfirm = true">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+    </header>
+
+    <!-- Barre d'action flottante — toujours atteignable même en bas d'une longue liste -->
+    <Teleport to="body">
+      <div v-if="selected.size > 0" class="selection-bar">
+        <button class="sel-cancel" title="Annuler la sélection" @click="selected = new Set()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <span class="sel-count">{{ selected.size }} sélectionné{{ selected.size > 1 ? 's' : '' }}</span>
+        <button class="sel-delete" @click="showConfirm = true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
           </svg>
-          {{ selected.size }}
+          Supprimer
         </button>
-        <button class="btn-cancel-sel" @click="selected = new Set()">✕</button>
       </div>
-    </header>
+    </Teleport>
 
     <!-- Search + Filter bar -->
     <div class="search-bar">
@@ -164,7 +182,9 @@
           </svg>
         </button>
         <div class="lb-info">
-          <span class="lb-date">{{ formatDateTime(lightbox.uploadedAt) }} · {{ formatSize(lightbox.size) }}</span>
+          <span class="lb-date">
+            {{ formatDateTime(lightbox.uploadedAt) }} · {{ formatSize(lightbox.size) }}<template v-if="lightbox.width && lightbox.height"> · {{ lightbox.width }}×{{ lightbox.height }}</template>
+          </span>
           <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ imageFiles.length }}</span>
           <button class="lb-dl" title="Renommer" @click="openRename(lightbox)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
@@ -179,7 +199,7 @@
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
             </svg>
           </button>
-          <button class="lb-dl" :title="lightbox.filename" @click="downloadFile(lightbox.filename, lightbox.url)">
+          <button class="lb-dl" :title="lightbox.originalName ?? lightbox.filename" @click="downloadFile(lightbox.filename, lightbox.url)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/>
@@ -320,6 +340,7 @@ const allFiles      = ref<FileEntry[]>([])
 const total         = ref(0)
 const loading       = ref(true)
 const loadingMore   = ref(false)
+const refreshing    = ref(false)
 const error         = ref('')
 const activeFilter  = ref<FilterKey>('all')
 const searchQuery   = ref('')
@@ -385,6 +406,27 @@ async function loadMore(): Promise<void> {
   loadingMore.value = true
   try { await fetchFiles(allFiles.value.length) }
   finally { loadingMore.value = false }
+}
+
+// Rafraîchissement manuel (bouton) — action explicite, on l'exécute toujours.
+async function load(): Promise<void> {
+  refreshing.value = true
+  error.value = ''
+  try { await fetchFiles(0) }
+  catch (e) { error.value = (e as Error).message }
+  finally { refreshing.value = false }
+}
+
+// Rafraîchissement automatique (retour sur l'onglet) — pour rattraper les
+// changements faits depuis un autre appareil (ex: suppression sur le tél
+// pendant que le PC reste ouvert). Silencieux, et on évite de perturber une
+// sélection en cours ou une lightbox ouverte en la reconstruisant sous les yeux.
+function autoRefresh(): void {
+  if (selected.value.size > 0 || lightbox.value || mediaFile.value) return
+  fetchFiles(0).catch(() => { /* échec silencieux, pas grave pour un refresh en fond */ })
+}
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'visible') autoRefresh()
 }
 
 function onCellClick(f: FileEntry): void {
@@ -512,8 +554,14 @@ onMounted(async () => {
   catch (e) { error.value = (e as Error).message }
   finally { loading.value = false }
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('focus', autoRefresh)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
-onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('focus', autoRefresh)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 </script>
 
 <style scoped>
@@ -538,6 +586,40 @@ onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
 }
 .sort-select:focus { border-color: rgba(99,102,241,.4); }
 
+.btn-refresh {
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; background: #1e293b; border: 1px solid rgba(255,255,255,.08);
+  border-radius: .625rem; color: #94a3b8; cursor: pointer; transition: color .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-refresh:hover:not(:disabled) { color: #e2e8f0; }
+.btn-refresh:disabled { cursor: default; }
+.icon-spin { animation: spin .8s linear infinite; }
+
+/* Barre de sélection flottante */
+.selection-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: center; gap: .75rem;
+  padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
+  background: rgba(15, 23, 42, 0.97); backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.sel-cancel {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; background: transparent; border: 1px solid rgba(255,255,255,.1);
+  border-radius: .5rem; color: #94a3b8; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sel-cancel:hover { color: #e2e8f0; }
+.sel-count { flex: 1; font-size: .875rem; color: #e2e8f0; font-weight: 500; }
+.sel-delete {
+  flex-shrink: 0; display: flex; align-items: center; gap: .375rem;
+  padding: .625rem 1rem; background: #dc2626; border: none; border-radius: .75rem;
+  color: #fff; font-size: .875rem; font-weight: 600; font-family: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sel-delete:hover { background: #b91c1c; }
+
 /* Search bar */
 .search-bar {
   position: relative; display: flex; align-items: center;
@@ -558,15 +640,6 @@ onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
   cursor: pointer; font-size: .875rem; padding: .25rem; line-height: 1; transition: color .15s;
 }
 .search-clear:hover { color: #94a3b8; }
-.btn-delete-sel {
-  display: flex; align-items: center; gap: .375rem; padding: .4375rem .875rem;
-  background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.3);
-  border-radius: .625rem; color: #f87171; font-size: .8125rem; font-family: inherit; cursor: pointer;
-}
-.btn-cancel-sel {
-  padding: .4375rem .625rem; background: transparent; border: 1px solid rgba(255,255,255,.1);
-  border-radius: .625rem; color: #475569; font-size: .875rem; font-family: inherit; cursor: pointer;
-}
 
 /* Filter bar */
 .filter-bar {
@@ -754,7 +827,7 @@ onUnmounted(() => { window.removeEventListener('keydown', onKeyDown) })
   border: 1px solid rgba(255,255,255,.08); border-radius: 1.25rem; padding: 1.5rem;
   display: flex; flex-direction: column; gap: .875rem;
 }
-.dialog-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.dialog-title { margin: 0; font-size: 1rem; font-weight: 600; color: #f8fafc; }
 .dialog-sub { margin: 0; font-size: .875rem; color: #64748b; }
 .dialog-actions { display: flex; gap: .625rem; }
 .btn-danger {

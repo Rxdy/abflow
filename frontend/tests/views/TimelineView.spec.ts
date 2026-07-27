@@ -24,6 +24,10 @@ function makeFile(overrides: Partial<FileEntry> = {}): FileEntry {
     size: 1024,
     fileType: 'image',
     displayName: null,
+    originalName: null,
+    mimeType: null,
+    width: null,
+    height: null,
     ...overrides,
   }
 }
@@ -180,6 +184,36 @@ describe('TimelineView', () => {
     expect(document.querySelector('.lb-date')!.textContent).toMatch(/2\.0 Mo/)
   })
 
+  it('shows the image dimensions in the lightbox when known', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-1.jpg', width: 1920, height: 1080 })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    expect(document.querySelector('.lb-date')!.textContent).toMatch(/1920×1080/)
+  })
+
+  it('omits dimensions from the lightbox when unknown', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-1.jpg', width: null, height: null })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    expect(document.querySelector('.lb-date')!.textContent).not.toContain('×')
+  })
+
+  it('uses the original filename as the download button title when available', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-1.jpg', originalName: 'plage été.jpg' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    expect(screen.getByTitle('plage été.jpg')).toBeTruthy()
+  })
+
   it('navigates the lightbox with keyboard arrows and closes on Escape', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-1.jpg' }),
@@ -250,5 +284,82 @@ describe('TimelineView', () => {
 
     await fireEvent.click(screen.getByTitle(files[0].filename))
     expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
+  })
+
+  describe('selection and bulk delete', () => {
+    it('shows a floating selection bar reachable without scrolling, and deletes the selection', async () => {
+      const files = [
+        makeFile({ filename: '1700000000000-a1-1.jpg' }),
+        makeFile({ filename: '1700000000000-b2-2.jpg' }),
+      ]
+      getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+      deleteImages.mockResolvedValue({ deleted: [files[0].filename], errors: [] })
+      await mount()
+      await flushPromises()
+
+      expect(document.querySelector('.selection-bar')).toBeNull()
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      expect(screen.getByText('1 sélectionné')).toBeTruthy()
+
+      getImages.mockResolvedValueOnce({ total: 1, limit: 50, offset: 0, images: [files[1]] })
+      await fireEvent.click(screen.getByText('Supprimer'))
+      await fireEvent.click(document.querySelector('.btn-danger')!)
+      await flushPromises()
+
+      expect(deleteImages).toHaveBeenCalledWith([files[0].filename])
+      expect(document.querySelector('.selection-bar')).toBeNull()
+    })
+
+    it('clears the selection from the floating bar without deleting anything', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      expect(document.querySelector('.selection-bar')).toBeTruthy()
+
+      await fireEvent.click(screen.getByTitle('Annuler la sélection'))
+      expect(document.querySelector('.selection-bar')).toBeNull()
+      expect(deleteImages).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('refresh', () => {
+    it('refetches the list when the refresh button is clicked', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(1)
+
+      await fireEvent.click(screen.getByTitle('Rafraîchir'))
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(2)
+    })
+
+    it('refetches automatically when the window regains focus', async () => {
+      getImages.mockResolvedValue({ total: 0, limit: 50, offset: 0, images: [] })
+      await mount()
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(1)
+
+      window.dispatchEvent(new Event('focus'))
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not auto-refresh while files are selected, to avoid disrupting the selection', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      expect(getImages).toHaveBeenCalledTimes(1)
+
+      window.dispatchEvent(new Event('focus'))
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(1)
+    })
   })
 })

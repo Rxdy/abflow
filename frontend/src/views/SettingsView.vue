@@ -260,7 +260,7 @@ onMounted(loadKeys)
   border: 1px solid rgba(255,255,255,.08); border-radius: 1.25rem; padding: 1.5rem;
   display: flex; flex-direction: column; gap: .875rem;
 }
-.dialog-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.dialog-title { margin: 0; font-size: 1rem; font-weight: 600; color: #f8fafc; }
 .dialog-sub { margin: 0; font-size: .875rem; color: #64748b; line-height: 1.4; }
 .dialog-actions { display: flex; gap: .625rem; }
 
