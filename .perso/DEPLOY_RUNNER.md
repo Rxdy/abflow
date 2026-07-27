@@ -1,41 +1,46 @@
-# CI/CD — déploiement automatique sur le Raspberry Pi
+# Déploiement — GHCR + Traefik + Watchtower
+
+AbFlow suit le même pattern que les autres projets hébergés sur le Pi (charlene,
+portfolio, abview, metryx…). L'approche "runner self-hosted + `docker compose up
+--build` en local" décrite ici auparavant n'a jamais été installée sur le Pi
+(aucun runner enregistré, aucun dossier `actions-runner`) et est abandonnée.
 
 ## Comment ça marche
 
-- `.github/workflows/ci.yml` — tourne sur les runners GitHub (cloud), sur chaque push et
-  chaque PR vers `main` : tests backend (`node --test`), typecheck + tests + build frontend.
-- `.github/workflows/deploy.yml` — tourne sur un runner **self-hosted installé sur le Pi**,
-  seulement après que `CI` a terminé avec succès sur `main` (trigger `workflow_run`). Il fait
-  `docker compose up -d --build` directement sur place.
+- `.github/workflows/ci.yml` — tourne sur les runners GitHub (cloud) à chaque push
+  et PR vers `main` : tests backend/frontend, e2e Playwright, puis (seulement sur
+  push vers `main`, après succès des jobs précédents) le job `build-and-push`
+  build les images `backend` et `frontend` en arm64 et les pousse sur
+  `ghcr.io/rxdy/abflow-backend` et `ghcr.io/rxdy/abflow-frontend`.
+- Sur le Pi, **Watchtower** (conteneur partagé entre tous les projets, poll
+  toutes les 5 min) détecte les nouvelles images taguées `latest` sur les
+  conteneurs labellisés `com.centurylinklabs.watchtower.enable=true` et les
+  redémarre automatiquement — pas d'action manuelle nécessaire après le premier
+  déploiement.
+- **Traefik** (conteneur partagé, `~/infra/docker-compose.yml`) route
+  `abflow.rxdy.fr` vers le conteneur frontend via les labels dans
+  `docker-compose.prod.yml`, et gère le certificat HTTPS (Let's Encrypt).
 
-Comme `deploy.yml` ne se déclenche que via `workflow_run` (jamais directement sur `pull_request`),
-une PR ne peut jamais exécuter de code sur le Pi — seul un push (ou merge) sur `main` qui passe
-la CI le peut. C'est important : un runner self-hosted exécute du code arbitraire du repo, donc
-il ne faut jamais l'exposer aux workflows déclenchés par des PRs externes.
+## Sur le Pi
 
-## Installer le runner sur le Pi
+- Compose file de prod : `~/abflow/docker-compose.prod.yml` (référence les
+  images GHCR, pas de build local).
+- `~/abflow/.env` — secrets de prod (`AUTH_PASSWORD`, `JWT_SECRET`, `API_KEY`),
+  généré une fois, jamais commité, jamais touché par un déploiement automatique.
+- `~/abflow/uploads/` — stockage des fichiers, monté en volume.
 
-1. Sur GitHub : `Settings` → `Actions` → `Runners` → `New self-hosted runner` (choisir Linux ARM64).
-2. Sur le Pi, suivre les commandes affichées (téléchargement + `./config.sh --url ... --token ...`).
-   Quand il demande les labels, ajouter `raspberry-pi` en plus du label par défaut `self-hosted`.
-3. L'installer comme service pour qu'il survive aux reboots :
-   ```bash
-   sudo ./svc.sh install
-   sudo ./svc.sh start
-   ```
-4. Vérifier qu'il apparaît "Idle" dans `Settings` → `Actions` → `Runners`.
+## Premier déploiement / changement de compose
 
-## Pré-requis sur le Pi
+Si `docker-compose.prod.yml` change (nouveau service, nouveau label…), il faut
+le mettre à jour manuellement sur le Pi et relancer :
 
-- Le `.env` (avec `STORAGE_QUOTA_MB=2000`, secrets, etc.) doit déjà exister dans le dossier où
-  tourne `docker compose` — il n'est **jamais** touché par le déploiement (`clean: false` dans
-  le checkout), puisqu'il est gitignored et n'existe que localement sur le Pi.
-- Docker + Docker Compose installés sur le Pi.
-- Le dossier du runner (`actions-runner/`) doit être dans le même repo cloné que celui utilisé
-  par `make up`, pour que `docker compose up -d --build` trouve le bon `docker-compose.yml`.
+```bash
+ssh rp-meliodas
+cd ~/abflow
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
 
-## Tester le pipeline
-
-Pousser un commit sur `main` (ou merger une PR), puis suivre l'onglet **Actions** du repo :
-`CI` doit passer, puis `Deploy` doit se déclencher automatiquement et redémarrer les conteneurs
-sur le Pi.
+Pour un changement de code applicatif (backend/frontend), rien à faire à la
+main : push sur `main`, la CI build et push l'image, Watchtower la récupère
+sous 5 minutes.

@@ -1,0 +1,37 @@
+services:
+  backend:
+    image: ghcr.io/rxdy/abflow-backend:latest
+    container_name: abflow-backend-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - UPLOADS_DIR=/uploads
+    volumes:
+      - ${UPLOADS_PATH:-./uploads}:/uploads
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - default
+
+  frontend:
+    image: ghcr.io/rxdy/abflow-frontend:latest
+    container_name: abflow-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.abflow.entrypoints=websecure
+      - traefik.http.routers.abflow.rule=Host(`abflow.rxdy.fr`)
+      - traefik.http.routers.abflow.tls.certresolver=leresolver
+      - traefik.http.services.abflow.loadbalancer.server.port=80
+    networks:
+      - default
+      - web
+
+networks:
+  default: {}
+  web:
+    external: true
