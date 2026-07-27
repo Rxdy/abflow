@@ -21,7 +21,7 @@
         </button>
       </div>
     </div>
-    <div v-if="storagePct !== null" class="storage-bar" :title="storageLabel">
+    <div v-if="storagePct !== null" class="storage-bar" :title="storageTitle">
       <div class="storage-bar-track">
         <div class="storage-bar-fill" :class="storageLevelClass" :style="{ width: storagePct + '%' }"></div>
       </div>
@@ -35,7 +35,7 @@ import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStats } from '../composables/useStats'
-import { formatSize } from '../utils/format'
+import { formatSize, formatSizeExact } from '../utils/format'
 
 const appName = import.meta.env.VITE_APP_NAME || 'AbFlow'
 const { token, logout } = useAuth()
@@ -61,6 +61,17 @@ const storageLabel = computed(() => {
   if (!stats.value?.quotaBytes) return ''
   const remaining = stats.value.quotaBytes - stats.value.totalSize
   return `${formatSize(Math.max(0, remaining))} restants sur ${formatSize(stats.value.quotaBytes)}`
+})
+
+// Tooltip natif (hover) — valeurs exactes en octets, formatSize() arrondit à 2
+// décimales et masque les petites variations sur un quota de plusieurs Go.
+const storageTitle = computed(() => {
+  if (!stats.value?.quotaBytes) return ''
+  const { totalSize, quotaBytes } = stats.value
+  const remaining = Math.max(0, quotaBytes - totalSize)
+  const pct = ((totalSize / quotaBytes) * 100).toFixed(2)
+  return `${formatSizeExact(totalSize)} utilisés sur ${formatSizeExact(quotaBytes)} `
+    + `(${formatSizeExact(remaining)} restants) — ${pct} %`
 })
 </script>
 

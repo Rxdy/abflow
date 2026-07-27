@@ -21,7 +21,8 @@ function mount() {
       { path: '/files', name: 'files', component: { template: '<div>files</div>' } },
     ],
   })
-  return render(SettingsView, { global: { plugins: [router] } })
+  const result = render(SettingsView, { global: { plugins: [router] } })
+  return { ...result, router }
 }
 
 beforeEach(() => {
@@ -44,6 +45,17 @@ describe('SettingsView', () => {
     mount()
     await flushPromises()
     expect(screen.getByText('AbView')).toBeTruthy()
+  })
+
+  it('has a back button that returns to the files view', async () => {
+    const { router } = mount()
+    await flushPromises()
+    const back = screen.getByTitle('Retour')
+    expect(back.getAttribute('href')).toBe('/files')
+
+    await fireEvent.click(back)
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('files')
   })
 
   it('creates a key and reveals the plaintext value once', async () => {

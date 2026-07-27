@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSize } from '../../src/utils/format'
+import { formatSize, formatSizeExact } from '../../src/utils/format'
 
 describe('formatSize', () => {
   it('formats bytes', () => {
@@ -20,5 +20,17 @@ describe('formatSize', () => {
 
   it('formats zero bytes', () => {
     expect(formatSize(0)).toBe('0 o')
+  })
+})
+
+describe('formatSizeExact', () => {
+  it('never rounds, unlike formatSize', () => {
+    // 2000 Mio et 1953 Mio arrondissent tous les deux à "1.95 Go" avec
+    // formatSize() — formatSizeExact() doit rester distinguable.
+    expect(formatSizeExact(2000 * 1024 * 1024)).not.toBe(formatSizeExact(1953 * 1024 * 1024))
+  })
+
+  it('formats with French thousands separators', () => {
+    expect(formatSizeExact(4_161_489)).toBe(`${(4_161_489).toLocaleString('fr-FR')} o`)
   })
 })

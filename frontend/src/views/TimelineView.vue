@@ -164,7 +164,7 @@
           </svg>
         </button>
         <div class="lb-info">
-          <span class="lb-date">{{ formatDateTime(lightbox.uploadedAt) }}</span>
+          <span class="lb-date">{{ formatDateTime(lightbox.uploadedAt) }} · {{ formatSize(lightbox.size) }}</span>
           <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ imageFiles.length }}</span>
           <button class="lb-dl" title="Renommer" @click="openRename(lightbox)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
