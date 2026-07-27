@@ -9,7 +9,6 @@ const BASE_ENV = {
   JWT_SECRET: 'test_jwt_secret_at_least_32_characters_long',
   CORS_ORIGIN: 'http://localhost:5173',
   STORAGE_TYPE: 'local',
-  API_KEY: 'test_api_key',
 }
 
 export async function makeTestApp(overrides = {}) {

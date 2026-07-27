@@ -22,3 +22,13 @@ export interface Stats {
   byType: Partial<Record<FileType, number>>
   quotaBytes: number | null
 }
+
+export interface ApiKey {
+  id: string
+  name: string
+  createdAt: number
+}
+
+export interface ApiKeyCreated extends ApiKey {
+  key: string
+}

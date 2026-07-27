@@ -254,4 +254,72 @@ describe('useApi', () => {
 
     await expect(uploadPromise).rejects.toThrow('Erreur réseau')
   })
+
+  it('getApiKeys requests the right URL and returns the keys array', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ keys: [{ id: '1', name: 'AbView', createdAt: 123 }] }),
+    })
+
+    const result = await api.getApiKeys()
+    const [url] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/keys')
+    expect(result).toEqual([{ id: '1', name: 'AbView', createdAt: 123 }])
+  })
+
+  it('createApiKey posts the name and returns the created key', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_14' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: '1', name: 'AbView', createdAt: 123, key: 'abf_xxx' }),
+    })
+
+    const result = await api.createApiKey('AbView')
+    const [url, opts] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/keys')
+    expect(JSON.parse(opts.body)).toEqual({ name: 'AbView' })
+    expect(result).toEqual({ id: '1', name: 'AbView', createdAt: 123, key: 'abf_xxx' })
+  })
+
+  it('createApiKey throws the server error message on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'name required' }) })
+    await expect(api.createApiKey('')).rejects.toThrow('name required')
+  })
+
+  it('deleteApiKey sends a DELETE to the right URL', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: true })
+    await api.deleteApiKey('1')
+    const [url, opts] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/keys/1')
+    expect(opts.method).toBe('DELETE')
+  })
+
+  it('deleteApiKey throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_17' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+    await expect(api.deleteApiKey('ghost')).rejects.toThrow('Erreur suppression de la clé')
+  })
 })

@@ -5,7 +5,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs/promises'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes, createHash } from 'crypto'
 import { createStorage } from './storage/index.js'
 
 // ── File type helpers ────────────────────────────────────────────────────────
@@ -32,7 +32,6 @@ export async function createApp() {
   const JWT_SECRET  = process.env.JWT_SECRET
   const AUTH_USER   = process.env.AUTH_USERNAME
   const AUTH_PASS   = process.env.AUTH_PASSWORD
-  const API_KEY     = process.env.API_KEY       || null
   const CORS_ORIGIN = process.env.CORS_ORIGIN   || ''
   const QUOTA_BYTES = process.env.STORAGE_QUOTA_MB
     ? parseInt(process.env.STORAGE_QUOTA_MB, 10) * 1024 * 1024
@@ -42,7 +41,6 @@ export async function createApp() {
     console.error('[ERROR] Missing JWT_SECRET / AUTH_USERNAME / AUTH_PASSWORD')
     process.exit(1)
   }
-  if (!API_KEY) console.warn('[WARN] API_KEY not set — API key auth disabled')
 
   // Hash le mot de passe une fois au démarrage — évite de stocker un hash bcrypt
   // avec des $ dans les variables d'environnement (problème d'interpolation Docker)
@@ -78,6 +76,30 @@ export async function createApp() {
 
   async function saveDisplayNames() {
     await Promise.resolve(storage.writeTextFile(NAMES_FILE, JSON.stringify(Object.fromEntries(displayNames))))
+  }
+
+  // ── Clés API (générées depuis l'UI, pour les intégrations externes type AbView) ──
+  // On ne stocke jamais la clé en clair : seul son hash sha256 est persisté, la
+  // clé elle-même n'est renvoyée qu'une fois, à la création (même logique qu'un
+  // token GitHub) — même quelqu'un avec accès au fichier ne peut pas la rejouer.
+  const KEYS_FILE = '.api-keys.json'
+  let apiKeys = new Map() // id → { id, name, keyHash, createdAt }
+  try {
+    const raw = await Promise.resolve(storage.readTextFile(KEYS_FILE))
+    if (raw) apiKeys = new Map(Object.entries(JSON.parse(raw)))
+  } catch { /* fichier absent ou corrompu — on repart d'une map vide */ }
+
+  async function saveApiKeys() {
+    await Promise.resolve(storage.writeTextFile(KEYS_FILE, JSON.stringify(Object.fromEntries(apiKeys))))
+  }
+
+  function hashApiKey(key) {
+    return createHash('sha256').update(key).digest('hex')
+  }
+
+  function findApiKeyByHash(hash) {
+    for (const entry of apiKeys.values()) if (entry.keyHash === hash) return entry
+    return null
   }
 
   async function listFiles() {
@@ -131,7 +153,11 @@ export async function createApp() {
   function apiKeyAuth(req, res, next) {
     const key = req.headers['x-api-key']
     if (!key) return res.status(401).json({ error: 'Missing X-API-Key header' })
-    if (!API_KEY || key !== API_KEY) return res.status(401).json({ error: 'Invalid API key' })
+    const entry = findApiKeyByHash(hashApiKey(key))
+    if (!entry) return res.status(401).json({ error: 'Invalid API key' })
+    // Une clé API n'a jamais accès qu'aux images (voir /api/images, /api/images/:filename,
+    // /uploads/:filename) — c'est le contrat pour les intégrations externes comme AbView.
+    req.authViaApiKey = true
     next()
   }
 
@@ -161,7 +187,9 @@ export async function createApp() {
   app.get('/api/images', anyAuth, async (req, res) => {
     const limit      = Math.min(parseInt(req.query.limit  ?? '50',  10) || 50, 200)
     const offset     = Math.max(parseInt(req.query.offset ?? '0',   10) || 0,  0)
-    const typeFilter = req.query.type ?? null
+    // Une clé API ne peut jamais lister autre chose que des images, quel que
+    // soit le filtre demandé — le contrat "images only" est imposé côté serveur.
+    const typeFilter = req.authViaApiKey ? 'image' : (req.query.type ?? null)
     let all = await listFiles()
     if (typeFilter && typeFilter !== 'all') all = all.filter(f => f.fileType === typeFilter)
     res.json({ total: all.length, limit, offset, images: all.slice(offset, offset + limit) })
@@ -171,8 +199,10 @@ export async function createApp() {
     const filename = path.basename(req.params.filename)
     const exists = await Promise.resolve(storage.exists(filename))
     if (!exists) return res.status(404).json({ error: 'Not found' })
+    const fileType = getFileType(filename)
+    if (req.authViaApiKey && fileType !== 'image') return res.status(404).json({ error: 'Not found' })
     const info = await Promise.resolve(storage.stat(filename))
-    res.json({ filename, url: `/uploads/${filename}`, ...info, fileType: getFileType(filename), displayName: displayNames.get(filename) ?? null })
+    res.json({ filename, url: `/uploads/${filename}`, ...info, fileType, displayName: displayNames.get(filename) ?? null })
   })
 
   app.patch('/api/images/:filename', jwtAuth, async (req, res) => {
@@ -211,6 +241,33 @@ export async function createApp() {
     res.status(204).end()
   })
 
+  // ── Clés API (gestion réservée à l'utilisateur connecté — jamais via clé API) ──
+  app.get('/api/keys', jwtAuth, (_req, res) => {
+    const keys = [...apiKeys.values()]
+      .map(({ id, name, createdAt }) => ({ id, name, createdAt }))
+      .sort((a, b) => b.createdAt - a.createdAt)
+    res.json({ keys })
+  })
+
+  app.post('/api/keys', jwtAuth, async (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 100) : ''
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const id = randomUUID()
+    const key = `abf_${randomBytes(32).toString('hex')}`
+    const createdAt = Date.now()
+    apiKeys.set(id, { id, name, keyHash: hashApiKey(key), createdAt })
+    await saveApiKeys()
+    // La clé en clair n'est retournée qu'ici, une seule fois.
+    res.status(201).json({ id, name, key, createdAt })
+  })
+
+  app.delete('/api/keys/:id', jwtAuth, async (req, res) => {
+    if (!apiKeys.has(req.params.id)) return res.status(404).json({ error: 'Not found' })
+    apiKeys.delete(req.params.id)
+    await saveApiKeys()
+    res.status(204).end()
+  })
+
   app.get('/api/stats', anyAuth, async (_req, res) => {
     const files = await listFiles()
     const byType = {}
@@ -230,6 +287,7 @@ export async function createApp() {
     const filename = path.basename(req.params.filename)
     const exists = await Promise.resolve(storage.exists(filename))
     if (!exists) return res.status(404).end()
+    if (req.authViaApiKey && getFileType(filename) !== 'image') return res.status(404).end()
     await Promise.resolve(storage.pipe(filename, res))
   })
 
