@@ -104,6 +104,9 @@ export async function createApp() {
 
   // ── App ─────────────────────────────────────────────────────────────────────
   const app = express()
+  // Un seul hop de proxy en prod (Traefik) — nécessaire pour que
+  // express-rate-limit et req.ip lisent le bon client derrière X-Forwarded-For.
+  app.set('trust proxy', 1)
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
   app.use(express.json())
