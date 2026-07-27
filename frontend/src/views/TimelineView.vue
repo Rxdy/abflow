@@ -385,9 +385,9 @@ const filteredFiles = computed(() => {
     ? allFiles.value
     : allFiles.value.filter(f => f.fileType === activeFilter.value)
   const q = searchQuery.value.trim().toLowerCase()
-  if (q) files = files.filter(f => cleanName(f.filename).toLowerCase().includes(q) || f.filename.toLowerCase().includes(q))
+  if (q) files = files.filter(f => bestName(f).toLowerCase().includes(q) || f.filename.toLowerCase().includes(q))
   const sorted = [...files]
-  if (sortKey.value === 'name') sorted.sort((a, b) => cleanName(a.filename).localeCompare(cleanName(b.filename), 'fr'))
+  if (sortKey.value === 'name') sorted.sort((a, b) => bestName(a).localeCompare(bestName(b), 'fr'))
   else if (sortKey.value === 'size') sorted.sort((a, b) => b.size - a.size)
   // 'date' keeps the API order (newest first)
   return sorted
@@ -491,17 +491,27 @@ async function doDelete(): Promise<void> {
 
 function typeIcon(t: string): string { return TYPE_ICONS[t as FileType] ?? '📎' }
 function ext(filename: string): string { return filename.split('.').pop()?.toUpperCase() ?? '' }
-function cleanName(filename: string): string {
-  const name = filename.replace(/^\d+-[a-f0-9]+-/, '').replace(/\.[^.]+$/, '')
+function truncate(name: string): string {
   return name.length > 30 ? name.slice(0, 28) + '…' : name
 }
+// Nom physique (horodatage-hash, ex: "1785271234567-a3f9c1b2e4d5.jpg") — ne
+// contient jamais le vrai nom d'origine, ce n'est qu'un dernier recours dégradé
+// pour les fichiers uploadés avant l'ajout de originalName côté backend.
+function cleanName(filename: string): string {
+  return truncate(filename.replace(/^\d+-[a-f0-9]+-/, '').replace(/\.[^.]+$/, ''))
+}
+// Meilleur nom disponible : le vrai nom du fichier tel qu'il était sur l'appareil
+// au moment de l'upload (originalName) si on l'a, sinon le fallback dégradé.
+function bestName(f: FileEntry): string {
+  return f.originalName ? truncate(f.originalName.replace(/\.[^.]+$/, '')) : cleanName(f.filename)
+}
 function displayNameOf(f: FileEntry): string {
-  return f.displayName || cleanName(f.filename)
+  return f.displayName || bestName(f)
 }
 
 function openRename(f: FileEntry): void {
   renameTarget.value = f
-  renameValue.value = f.displayName ?? cleanName(f.filename)
+  renameValue.value = f.displayName ?? bestName(f)
   renameError.value = ''
 }
 

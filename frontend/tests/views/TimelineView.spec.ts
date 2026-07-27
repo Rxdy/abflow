@@ -162,6 +162,48 @@ describe('TimelineView', () => {
     expect(screen.getByText('report')).toBeTruthy()
   })
 
+  it('prefers the true original filename over the meaningless generated one', async () => {
+    // Le nom physique sur le disque n'est qu'un horodatage + hash aléatoire
+    // (voir storage/local.js) — jamais le nom du fichier tel qu'il était sur
+    // l'appareil au moment de l'upload. C'est originalName qui a ce vrai nom.
+    const files = [
+      makeFile({
+        filename: '1785271234567-a3f9c1b2e4d5.pdf',
+        fileType: 'document',
+        originalName: 'Facture Juillet 2026.pdf',
+      }),
+    ]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(screen.getByText('Facture Juillet 2026')).toBeTruthy()
+    expect(screen.queryByText(/a3f9c1b2e4d5/)).toBeNull()
+  })
+
+  it('falls back to a cleaned-up generated name when originalName is unknown (old uploads)', async () => {
+    const files = [makeFile({
+      filename: '1700000000000-a1-old-upload.pdf', fileType: 'document', originalName: null,
+    })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(screen.getByText('old-upload')).toBeTruthy()
+  })
+
+  it('search matches the original filename, not the generated one', async () => {
+    const files = [makeFile({
+      filename: '1785271234567-a3f9c1b2e4d5.pdf', fileType: 'document', originalName: 'Facture Juillet.pdf',
+    })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.update(screen.getByPlaceholderText('Rechercher…'), 'facture')
+    expect(document.querySelectorAll('.file-cell').length).toBe(1)
+  })
+
   it('searches files by their cleaned name', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-holiday.jpg', fileType: 'document' }),
