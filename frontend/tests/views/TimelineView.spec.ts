@@ -99,16 +99,27 @@ describe('TimelineView', () => {
   it('filters files by type via the filter chips', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-a.jpg', fileType: 'image' }),
-      makeFile({ filename: '1700000000000-b2-b.mp4', fileType: 'video', size: 5000 }),
+      makeFile({ filename: '1700000000000-b2-b.pdf', fileType: 'document', size: 5000 }),
     ]
     getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
     await mount()
     await flushPromises()
 
     expect(document.querySelectorAll('.file-cell, .doc-item').length).toBe(2)
-    await fireEvent.click(screen.getByText('Vidéos'))
+    await fireEvent.click(screen.getByText('Documents'))
     expect(document.querySelectorAll('.file-cell, .doc-item').length).toBe(1)
     expect(document.querySelectorAll('.doc-item').length).toBe(1)
+  })
+
+  it('shows videos in the grid (like photos), not the doc list', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(document.querySelectorAll('.file-cell').length).toBe(1)
+    expect(document.querySelectorAll('.doc-item').length).toBe(0)
+    expect(document.querySelector('.cell-play-badge')).toBeTruthy()
   })
 
   it('searches files by their cleaned name', async () => {
@@ -240,7 +251,7 @@ describe('TimelineView', () => {
     await mount()
     await flushPromises()
 
-    await fireEvent.click(document.querySelector('.doc-item')!)
+    await fireEvent.click(document.querySelector('.file-cell')!)
     const video = document.querySelector('video.lb-media')
     expect(video?.getAttribute('src')).toBe(files[0].url)
   })
@@ -366,7 +377,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       const video = document.querySelector('.lb-media')
       expect(video?.tagName).toBe('VIDEO')
       expect(video?.getAttribute('src')).toBe(files[0].url)
@@ -539,7 +550,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       expect(document.querySelector('.lightbox')).toBeTruthy()
 
       await fireEvent.click(document.querySelector('.lb-close')!)
@@ -694,9 +705,6 @@ describe('TimelineView', () => {
     })
 
     it('opens rename, share and download from inside the media viewer itself', async () => {
-      // Le doc-item a ses propres boutons Renommer/Partager identiques dans la
-      // liste — ceux-ci sont distincts et vérifiés séparément par ailleurs. Ici
-      // on cible spécifiquement ceux du lecteur média une fois ouvert.
       const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
       getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
       renameFile.mockResolvedValue({ displayName: 'Vidéo' })
@@ -704,7 +712,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       const viewer = within(document.querySelector('.lightbox')!)
 
       await fireEvent.click(viewer.getByTitle('Renommer'))
@@ -726,7 +734,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       const lb = document.querySelector('.lightbox')!
       await fireEvent.click(lb)
       expect(document.querySelector('.lightbox')).toBeNull()
