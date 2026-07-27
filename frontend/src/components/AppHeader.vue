@@ -35,7 +35,7 @@ import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStats } from '../composables/useStats'
-import { formatSize, formatSizeExact } from '../utils/format'
+import { formatSize } from '../utils/format'
 
 const appName = import.meta.env.VITE_APP_NAME || 'AbFlow'
 const { token, logout } = useAuth()
@@ -63,15 +63,12 @@ const storageLabel = computed(() => {
   return `${formatSize(Math.max(0, remaining))} restants sur ${formatSize(stats.value.quotaBytes)}`
 })
 
-// Tooltip natif (hover) — valeurs exactes en octets, formatSize() arrondit à 2
-// décimales et masque les petites variations sur un quota de plusieurs Go.
+// Tooltip natif (hover) — le pourcentage exact, plus lisible que les octets bruts.
 const storageTitle = computed(() => {
   if (!stats.value?.quotaBytes) return ''
   const { totalSize, quotaBytes } = stats.value
-  const remaining = Math.max(0, quotaBytes - totalSize)
   const pct = ((totalSize / quotaBytes) * 100).toFixed(2)
-  return `${formatSizeExact(totalSize)} utilisés sur ${formatSizeExact(quotaBytes)} `
-    + `(${formatSizeExact(remaining)} restants) — ${pct} %`
+  return `${pct} % utilisés`
 })
 </script>
 
@@ -86,6 +83,11 @@ const storageTitle = computed(() => {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
+  /* En PWA sur iPhone (status bar "black-translucent"), le contenu passe SOUS
+     l'encoche/Dynamic Island et la barre système — sans ce padding, le nom de
+     l'app et les boutons clé API/déconnexion sont invisibles ou cliqués à
+     travers l'heure/le réseau/la batterie. */
+  padding-top: env(safe-area-inset-top);
 }
 
 .app-header-row {
