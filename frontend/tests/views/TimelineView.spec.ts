@@ -147,6 +147,21 @@ describe('TimelineView', () => {
     expect(document.querySelector('.cell-play-badge')).toBeTruthy()
   })
 
+  it('shows the file name as a caption on non-image grid cards (video/audio/PDF)', async () => {
+    const files = [
+      makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' }),
+      makeFile({ filename: '1700000000000-b2-report.pdf', fileType: 'document' }),
+      makeFile({ filename: '1700000000000-c3-photo.jpg', fileType: 'image' }),
+    ]
+    getImages.mockResolvedValue({ total: 3, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(document.querySelectorAll('.cell-caption').length).toBe(2)
+    expect(screen.getByText('clip')).toBeTruthy()
+    expect(screen.getByText('report')).toBeTruthy()
+  })
+
   it('searches files by their cleaned name', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-holiday.jpg', fileType: 'document' }),
@@ -345,7 +360,9 @@ describe('TimelineView', () => {
     await flushPromises()
 
     expect(renameFile).toHaveBeenCalledWith(files[0].filename, 'Facture juillet')
-    expect(screen.getByText(/Facture juillet/)).toBeTruthy()
+    // Le nom apparaît maintenant à la fois sur la carte de la grille (cell-caption)
+    // et dans la barre d'info du lecteur média (lb-meta) — on vérifie ce dernier.
+    expect(within(document.querySelector('.lightbox')!).getByText(/Facture juillet/)).toBeTruthy()
   })
 
   it('calls downloadFile when clicking the download button', async () => {

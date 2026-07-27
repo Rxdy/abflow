@@ -100,6 +100,7 @@
                   <path d="M8 5v14l11-7z"/>
                 </svg>
               </div>
+              <div v-if="f.fileType !== 'image'" class="cell-caption">{{ displayNameOf(f) }}</div>
               <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
@@ -767,6 +768,17 @@ onUnmounted(() => {
 .cell-icon-tile--audio { background: linear-gradient(160deg, #312e81 0%, #1e1b4b 100%); }
 .cell-icon-tile--document { background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%); }
 .cell-icon-emoji { font-size: 1.75rem; }
+
+/* Nom du fichier visible sans avoir à l'ouvrir — utile pour vidéo/audio/PDF qui
+   n'ont pas d'aperçu assez parlant pour se reconnaître au premier coup d'œil. */
+.cell-caption {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: .875rem .4rem .3rem;
+  background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+  color: #fff; font-size: .625rem; font-weight: 500; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+}
 
 .cell-checkbox { position: absolute; top: .3rem; left: .3rem; padding: .2rem; }
 .checkbox {
