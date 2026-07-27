@@ -1,7 +1,15 @@
 <template>
   <div class="settings-page">
     <header class="page-header">
-      <h1 class="page-title">Clés API</h1>
+      <div class="page-header-row">
+        <RouterLink to="/files" class="btn-back" title="Retour">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </RouterLink>
+        <h1 class="page-title">Clés API</h1>
+      </div>
       <p class="page-sub">
         Pour connecter une autre application (comme AbView) en lecture seule — elle ne
         pourra récupérer que les images, rien d'autre.
@@ -89,6 +97,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import type { ApiKey, ApiKeyCreated } from '../types'
 
@@ -165,8 +174,19 @@ onMounted(loadKeys)
 }
 
 .page-header { padding: 1.25rem 1.25rem 0; }
-.page-title { margin: 0 0 .375rem; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+.page-header-row { display: flex; align-items: center; gap: .625rem; margin-bottom: .375rem; }
+.page-title { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
 .page-sub { margin: 0 0 1.25rem; font-size: .8125rem; color: #64748b; line-height: 1.4; }
+
+.btn-back {
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  background: transparent; border: 1px solid rgba(255,255,255,.1);
+  border-radius: .5rem; color: #94a3b8; text-decoration: none;
+  transition: color .2s, border-color .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-back:hover { color: #e2e8f0; border-color: rgba(255,255,255,.2); }
 
 .settings-content {
   padding: 0 1.25rem;

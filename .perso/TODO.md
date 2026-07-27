@@ -8,14 +8,25 @@
 - [ ] **Détail fichier** — panneau avec nom complet, taille, date, type
 - [ ] **Navigation clavier lightbox** — déjà fait ✅
 - [ ] **Refresh token** — ou avertissement quand le JWT est proche d'expirer (24h)
+- [ ] **Multi-compte / multi-tenant** — plusieurs comptes utilisateurs, sessions séparées,
+      chaque user avec son propre espace de stockage cloisonné (upload/liste/quota isolés
+      des autres). Prévu pour le jour où AbFlow tourne sur un serveur plus gros que le Pi
+      avec plus de stockage — pas la priorité tant que c'est un seul utilisateur sur le Pi.
+      Implique de repenser `AUTH_USERNAME`/`AUTH_PASSWORD` (actuellement un seul compte en
+      dur dans `.env`) vers une vraie table de comptes, et de scoper `uploads/`,
+      `.display-names.json`, `.api-keys.json` et le quota par utilisateur.
+- [ ] **Système de sauvegarde** — pour la maintenance (avant mise à jour, changement de
+      matériel, etc.). À définir : quoi sauvegarder (`uploads/`, `.env`, `.display-names.json`,
+      `.api-keys.json`), où (autre disque ? SFTP externe ? cloud ?), et si ça doit être
+      automatique/planifié ou déclenché à la main avant une opération de maintenance.
 
 ## Fait ✅
 
 - [x] Tests backend (`node --test` + supertest) — auth, images, quota, share
 - [x] Tests frontend (vitest + testing-library/vue) — format, useAuth, useApi, AppHeader
 - [x] CI GitHub Actions — tests + typecheck + build sur chaque push/PR
-- [x] CD — runner self-hosted sur le Pi, déploiement auto après CI verte sur `main`
-      (voir `DEPLOY_RUNNER.md`)
+- [x] CD — build & push GHCR (arm64) après CI verte sur `main`, Watchtower redéploie
+      automatiquement sur le Pi (voir `DEPLOY_RUNNER.md`)
 - [x] Barre de stockage restant + quota configurable (`STORAGE_QUOTA_MB`)
 - [x] Exposition publique via Tailscale Funnel
 - [x] Auth bcrypt + JWT + rate limiting
@@ -44,4 +55,7 @@
 - [x] `make dev` — une seule commande
 - [x] HTTPS — `make https` + docker-compose.https.yml
 - [x] PWA — manifest.json + icônes
-- [x] Intégration AbView (screensaver depuis AbFlow via API key + détection d'inactivité)
+- [x] Clés API nommées, générées/révoquées depuis l'interface, restreintes aux images
+      (remplace l'ancienne clé statique `API_KEY` en `.env`)
+- [x] Intégration AbView (screensaver depuis AbFlow via clé API + détection d'inactivité —
+      code présent sur `feature/photos-carrousel` côté AbView, pas encore remergé sur `main`)
