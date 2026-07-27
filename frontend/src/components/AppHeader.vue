@@ -63,7 +63,9 @@ const storageLevelClass = computed(() => {
 const storageLabel = computed(() => {
   if (!stats.value?.quotaBytes) return ''
   const remaining = stats.value.quotaBytes - stats.value.totalSize
-  return `${formatSize(Math.max(0, remaining))} restants sur ${formatSize(stats.value.quotaBytes)}`
+  // Le pourcentage est affiché directement dans le label (pas seulement au survol
+  // du tooltip natif) — sur mobile il n'y a pas de hover fiable pour le voir.
+  return `${formatSize(Math.max(0, remaining))} restants sur ${formatSize(stats.value.quotaBytes)} (${storagePct.value} %)`
 })
 
 // Tooltip natif (hover) — le pourcentage exact, plus lisible que les octets bruts.
