@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/vue'
 import { flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import type { ApiKey, ApiKeyCreated } from '../../src/types'
 import SettingsView from '../../src/views/SettingsView.vue'
 
@@ -12,6 +13,17 @@ vi.mock('../../src/composables/useApi', () => ({
   useApi: () => ({ getApiKeys, createApiKey, deleteApiKey }),
 }))
 
+function mount() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/settings', name: 'settings', component: SettingsView },
+      { path: '/files', name: 'files', component: { template: '<div>files</div>' } },
+    ],
+  })
+  return render(SettingsView, { global: { plugins: [router] } })
+}
+
 beforeEach(() => {
   getApiKeys.mockReset().mockResolvedValue([])
   createApiKey.mockReset()
@@ -22,21 +34,21 @@ afterEach(() => cleanup())
 
 describe('SettingsView', () => {
   it('shows an empty hint when there are no keys', async () => {
-    render(SettingsView)
+    mount()
     await flushPromises()
     expect(screen.getByText(/Aucune clé pour l'instant/)).toBeTruthy()
   })
 
   it('lists existing keys with their name', async () => {
     getApiKeys.mockResolvedValue([{ id: '1', name: 'AbView', createdAt: Date.now() }])
-    render(SettingsView)
+    mount()
     await flushPromises()
     expect(screen.getByText('AbView')).toBeTruthy()
   })
 
   it('creates a key and reveals the plaintext value once', async () => {
     createApiKey.mockResolvedValue({ id: '2', name: 'AbView', createdAt: Date.now(), key: 'abf_secret123' })
-    render(SettingsView)
+    mount()
     await flushPromises()
 
     await fireEvent.update(screen.getByPlaceholderText(/Nom de la clé/), 'AbView')
@@ -48,7 +60,7 @@ describe('SettingsView', () => {
   })
 
   it('disables the submit button while the name is empty', async () => {
-    render(SettingsView)
+    mount()
     await flushPromises()
     const btn = screen.getByText('Générer une clé') as HTMLButtonElement
     expect(btn.disabled).toBe(true)
@@ -56,7 +68,7 @@ describe('SettingsView', () => {
 
   it('surfaces the server error message when key creation fails', async () => {
     createApiKey.mockRejectedValue(new Error('name required'))
-    render(SettingsView)
+    mount()
     await flushPromises()
 
     await fireEvent.update(screen.getByPlaceholderText(/Nom de la clé/), 'x')
@@ -69,7 +81,7 @@ describe('SettingsView', () => {
   it('revokes a key after confirming', async () => {
     getApiKeys.mockResolvedValue([{ id: '1', name: 'AbView', createdAt: Date.now() }])
     deleteApiKey.mockResolvedValue(undefined)
-    render(SettingsView)
+    mount()
     await flushPromises()
 
     await fireEvent.click(screen.getByTitle('Révoquer'))
