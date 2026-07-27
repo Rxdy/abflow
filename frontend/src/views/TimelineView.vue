@@ -80,15 +80,23 @@
           <span class="day-count">{{ group.files.length }}</span>
         </div>
 
-        <!-- Image grid for groups with images -->
+        <!-- Image grid for groups with images/videos -->
         <div v-if="hasImages(group)" class="image-grid">
           <template v-for="f in group.files" :key="f.filename">
-            <div v-if="f.fileType === 'image'"
+            <div v-if="f.fileType === 'image' || f.fileType === 'video'"
               class="file-cell"
               :class="{ 'file-cell--selected': selected.has(f.filename) }"
               @click="onCellClick(f)"
             >
-              <img :src="mediaUrl(f.url)" :alt="displayNameOf(f)" loading="lazy" />
+              <img v-if="f.fileType === 'image'" :src="mediaUrl(f.url)" :alt="displayNameOf(f)" loading="lazy" />
+              <template v-else>
+                <video :src="mediaUrl(f.url) + '#t=0.1'" class="cell-video-thumb" preload="metadata" muted playsinline></video>
+                <div class="cell-play-badge">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              </template>
               <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
@@ -102,10 +110,10 @@
           </template>
         </div>
 
-        <!-- Doc list for non-image files -->
+        <!-- Doc list for non-image/video files -->
         <div class="doc-list">
           <template v-for="f in group.files" :key="f.filename">
-            <div v-if="f.fileType !== 'image'"
+            <div v-if="f.fileType !== 'image' && f.fileType !== 'video'"
               class="doc-item"
               :class="{ 'doc-item--selected': selected.has(f.filename) }"
               @click="onDocClick(f)"
@@ -395,7 +403,7 @@ const groups = computed((): DayGroup[] => {
 })
 
 function hasImages(group: DayGroup): boolean {
-  return group.files.some(f => f.fileType === 'image')
+  return group.files.some(f => f.fileType === 'image' || f.fileType === 'video')
 }
 
 async function fetchFiles(offset = 0): Promise<void> {
@@ -434,6 +442,7 @@ function onVisibilityChange(): void {
 
 function onCellClick(f: FileEntry): void {
   if (selected.value.size > 0) { toggleSelect(f.filename); return }
+  if (f.fileType === 'video') { mediaFile.value = f; return }
   lightboxIndex.value = imageFiles.value.findIndex(i => i.filename === f.filename)
   lightbox.value = f
 }
@@ -727,10 +736,18 @@ onUnmounted(() => {
   background: #1e293b; cursor: pointer; position: relative;
   -webkit-tap-highlight-color: transparent;
 }
-.file-cell img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s; }
-.file-cell:hover img { transform: scale(1.04); }
+.file-cell img, .cell-video-thumb { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s; }
+.file-cell:hover img, .file-cell:hover .cell-video-thumb { transform: scale(1.04); }
 .file-cell--selected { outline: 2.5px solid #6366f1; outline-offset: -2.5px; }
-.file-cell--selected img { opacity: .7; }
+.file-cell--selected img, .file-cell--selected .cell-video-thumb { opacity: .7; }
+
+.cell-play-badge {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 2rem; height: 2rem; border-radius: 50%;
+  background: rgba(15,23,42,.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
 
 .cell-checkbox { position: absolute; top: .3rem; left: .3rem; padding: .2rem; }
 .checkbox {
@@ -795,7 +812,10 @@ onUnmounted(() => {
   color: #fff; cursor: pointer; transition: background .2s;
 }
 .lb-close:hover, .lb-nav:hover { background: rgba(255,255,255,.2); }
-.lb-close { top: 1rem; right: 1rem; }
+/* La lightbox est un overlay plein écran indépendant du header — sans ce
+   padding, la croix de fermeture passe sous l'encoche/la barre système en
+   PWA sur iPhone (batterie/wifi/réseau), donc injouable au clic. */
+.lb-close { top: calc(1rem + env(safe-area-inset-top)); right: calc(1rem + env(safe-area-inset-right)); }
 .lb-prev { left: .75rem; top: 50%; transform: translateY(-50%); }
 .lb-next { right: .75rem; top: 50%; transform: translateY(-50%); }
 .lb-info {
