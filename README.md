@@ -79,10 +79,11 @@ redéploie sans intervention manuelle. Voir `docker-compose.prod.yml`.
 ## Tests
 
 ```bash
-cd backend  && npm test         # 73 tests (node --test + supertest)
-cd frontend && npm test         # tests unitaires (Vitest)
+cd backend  && npm test              # 91 tests (node --test + supertest), ~99% de couverture
+cd frontend && npm test              # 103 tests unitaires (Vitest), ~92% de couverture
+cd frontend && npm run test:coverage # rapport de couverture détaillé
 cd frontend && npm run typecheck
-make e2e                        # parcours critique de bout en bout (Playwright)
+make e2e                             # parcours critique de bout en bout (Playwright)
 ```
 
 ## Structure du projet

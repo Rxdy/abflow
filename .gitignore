@@ -6,3 +6,4 @@ certs/
 uploads/
 test-results/
 playwright-report/
+coverage/

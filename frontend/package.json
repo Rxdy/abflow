@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@playwright/test": "^1.61.1",
     "@testing-library/vue": "^8.1.0",
     "@vitejs/plugin-vue": "^4.3.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^5.4.0",

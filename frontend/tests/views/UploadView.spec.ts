@@ -88,6 +88,40 @@ describe('UploadView', () => {
     expect(screen.getByTitle('Quota dépassé')).toBeTruthy()
   })
 
+  it('adds dropped files to the queue', async () => {
+    render(UploadView)
+    const dropZone = document.querySelector('.drop-zone')!
+    await fireEvent.drop(dropZone, { dataTransfer: { files: [makeFile('dropped.jpg', 500)] } })
+
+    expect(screen.getByText('dropped.jpg')).toBeTruthy()
+  })
+
+  it('warns before leaving the page while an upload is in progress', async () => {
+    let resolveUpload!: (v: unknown) => void
+    uploadImageWithProgress.mockImplementation(() => new Promise(resolve => { resolveUpload = resolve }))
+    render(UploadView)
+    await fireEvent.change(getFileInput(), { target: { files: [makeFile('a.jpg', 100)] } })
+    fireEvent.click(screen.getByText(/Publier 1 fichier/)) // pas d'await — l'upload doit rester en cours
+    await flushPromises()
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+
+    resolveUpload({
+      filename: 'a.jpg', url: '/uploads/a.jpg', size: 100, uploadedAt: 1, fileType: 'image',
+      displayName: null, originalName: null, mimeType: null, width: null, height: null,
+    })
+    await flushPromises()
+  })
+
+  it('does not warn before leaving the page once no upload is in progress', async () => {
+    render(UploadView)
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
   it('renders the stats card when stats are available', () => {
     stats.value = { count: 3, totalSize: 2 * 1024 * 1024, byType: {}, quotaBytes: null }
     render(UploadView)

@@ -358,6 +358,63 @@ describe('TimelineView', () => {
     })
   })
 
+  describe('media viewer (video/audio/pdf/unsupported)', () => {
+    it('opens a video in a <video> element', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      const video = document.querySelector('.lb-media')
+      expect(video?.tagName).toBe('VIDEO')
+      expect(video?.getAttribute('src')).toBe(files[0].url)
+    })
+
+    it('opens audio in an <audio> element', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-song.mp3', fileType: 'audio' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      expect(document.querySelector('.lb-audio')?.tagName).toBe('AUDIO')
+    })
+
+    it('opens a PDF in an iframe', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      expect(document.querySelector('.lb-pdf')?.tagName).toBe('IFRAME')
+    })
+
+    it('falls back to a download prompt for unsupported types', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-archive.zip', fileType: 'archive' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      expect(document.querySelector('.lb-unsupported')).toBeTruthy()
+
+      await fireEvent.click(screen.getByText('Télécharger'))
+      expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
+    })
+
+    it('shows the file size and name in the media viewer info bar', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-song.mp3', fileType: 'audio', size: 3 * 1024 * 1024 })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      expect(document.querySelector('.lb-meta')!.textContent).toMatch(/3\.0 Mo/)
+    })
+  })
+
   describe('refresh', () => {
     it('refetches the list when the refresh button is clicked', async () => {
       const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
