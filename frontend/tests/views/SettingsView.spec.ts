@@ -82,6 +82,18 @@ describe('SettingsView', () => {
     expect(btn.disabled).toBe(true)
   })
 
+  it('does not call createApiKey when the form is submitted with a blank name', async () => {
+    mount()
+    await flushPromises()
+
+    // Le bouton est désactivé, mais on soumet le formulaire directement pour
+    // vérifier que doCreate() lui-même se protège aussi contre un nom vide.
+    await fireEvent.submit(document.querySelector('.new-key-form')!)
+    await flushPromises()
+
+    expect(createApiKey).not.toHaveBeenCalled()
+  })
+
   it('surfaces the server error message when key creation fails', async () => {
     createApiKey.mockRejectedValue(new Error('name required'))
     mount()
@@ -147,6 +159,45 @@ describe('SettingsView', () => {
 
     expect(screen.getByRole('alert').textContent).toMatch(/Erreur suppression de la clé/)
     // La clé reste dans la liste — la révocation a échoué côté serveur.
+    expect(screen.getByText('AbView')).toBeTruthy()
+  })
+
+  it('closes the revealed-key dialog with "Fermer"', async () => {
+    createApiKey.mockResolvedValue({ id: '2', name: 'AbView', createdAt: Date.now(), key: 'abf_secret123' })
+    mount()
+    await flushPromises()
+
+    await fireEvent.update(screen.getByPlaceholderText(/Nom de la clé/), 'AbView')
+    await fireEvent.click(screen.getByText('Générer une clé'))
+    await flushPromises()
+    expect(screen.getByText('abf_secret123')).toBeTruthy()
+
+    await fireEvent.click(screen.getByText('Fermer'))
+    expect(screen.queryByText('abf_secret123')).toBeNull()
+  })
+
+  it('closes the revoke confirmation when clicking the backdrop itself', async () => {
+    getApiKeys.mockResolvedValue([{ id: '1', name: 'AbView', createdAt: Date.now() }])
+    mount()
+    await flushPromises()
+
+    await fireEvent.click(screen.getByTitle('Révoquer'))
+    const overlay = document.querySelector('.dialog-overlay')!
+    await fireEvent.click(overlay)
+
+    expect(document.querySelector('.dialog-overlay')).toBeNull()
+    expect(deleteApiKey).not.toHaveBeenCalled()
+  })
+
+  it('cancels revocation with "Annuler" without deleting the key', async () => {
+    getApiKeys.mockResolvedValue([{ id: '1', name: 'AbView', createdAt: Date.now() }])
+    mount()
+    await flushPromises()
+
+    await fireEvent.click(screen.getByTitle('Révoquer'))
+    await fireEvent.click(screen.getByText('Annuler'))
+
+    expect(deleteApiKey).not.toHaveBeenCalled()
     expect(screen.getByText('AbView')).toBeTruthy()
   })
 })

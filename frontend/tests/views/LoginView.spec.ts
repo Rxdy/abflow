@@ -78,4 +78,18 @@ describe('LoginView', () => {
     await mount('/?expired=1')
     expect(screen.getByText(/session expirée/i)).toBeTruthy()
   })
+
+  it('uses VITE_APP_NAME when set', async () => {
+    vi.stubEnv('VITE_APP_NAME', 'MonCloud')
+    await mount()
+    expect(screen.getByText('MonCloud')).toBeTruthy()
+    vi.unstubAllEnvs()
+  })
+
+  it('shows the instance name when VITE_INSTANCE_NAME is set', async () => {
+    vi.stubEnv('VITE_INSTANCE_NAME', 'Maison')
+    await mount()
+    expect(screen.getByText('Maison')).toBeTruthy()
+    vi.unstubAllEnvs()
+  })
 })

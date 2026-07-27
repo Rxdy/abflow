@@ -96,6 +96,34 @@ describe('UploadView', () => {
     expect(screen.getByText('dropped.jpg')).toBeTruthy()
   })
 
+  it('toggles the active state on dragover/dragleave', async () => {
+    render(UploadView)
+    const dropZone = document.querySelector('.drop-zone')!
+
+    await fireEvent.dragOver(dropZone)
+    expect(dropZone.className).toContain('drop-zone--active')
+
+    await fireEvent.dragLeave(dropZone)
+    expect(dropZone.className).not.toContain('drop-zone--active')
+  })
+
+  it('opens the file picker when clicking the drop zone', async () => {
+    render(UploadView)
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+
+    await fireEvent.click(document.querySelector('.drop-zone')!)
+    expect(clickSpy).toHaveBeenCalled()
+
+    clickSpy.mockRestore()
+  })
+
+  it('shows a type emoji for non-image files without a preview', async () => {
+    render(UploadView)
+    await fireEvent.change(getFileInput(), { target: { files: [makeFile('clip.mp4', 1024, 'video/mp4')] } })
+
+    expect(screen.getByText('🎬')).toBeTruthy()
+  })
+
   it('warns before leaving the page while an upload is in progress', async () => {
     let resolveUpload!: (v: unknown) => void
     uploadImageWithProgress.mockImplementation(() => new Promise(resolve => { resolveUpload = resolve }))

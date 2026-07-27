@@ -80,7 +80,7 @@ redéploie sans intervention manuelle. Voir `docker-compose.prod.yml`.
 
 ```bash
 cd backend  && npm test              # 91 tests (node --test + supertest), ~99% de couverture
-cd frontend && npm test              # 103 tests unitaires (Vitest), ~92% de couverture
+cd frontend && npm test              # 143 tests unitaires (Vitest), ~99.8% de couverture (lignes)
 cd frontend && npm run test:coverage # rapport de couverture détaillé
 cd frontend && npm run typecheck
 make e2e                             # parcours critique de bout en bout (Playwright)

@@ -48,6 +48,32 @@ describe('useApi', () => {
     expect(result).toEqual({ total: 0, limit: 50, offset: 0, images: [] })
   })
 
+  it('getImages omits the type param when passed "all"', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_1b' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ total: 0, limit: 50, offset: 0, images: [] }),
+    })
+
+    await api.getImages(50, 0, 'all')
+    const [url] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/images?limit=50&offset=0')
+  })
+
+  it('getImages throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_1c' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 })
+    await expect(api.getImages()).rejects.toThrow('Erreur chargement fichiers')
+  })
+
   it('logs out and returns null when a request gets a 401', async () => {
     const { auth, api, router } = setup()
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_2' }) })
@@ -75,6 +101,16 @@ describe('useApi', () => {
     })
 
     await expect(api.uploadImage(new File(['x'], 'photo.jpg'))).rejects.toThrow('Quota dépassé (max 2000 Mo)')
+  })
+
+  it('uploadImage falls back to a generic message when the server sends none', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3e' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
+    await expect(api.uploadImage(new File(['x'], 'photo.jpg'))).rejects.toThrow('Erreur upload')
   })
 
   it('uploadImage resolves with the created file on success', async () => {
@@ -281,6 +317,47 @@ describe('useApi', () => {
     expect(result.filename).toBe('gen.jpg')
   })
 
+  it('uploadImageWithProgress ignores progress events with no computable length', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_11b' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn((event: string, cb: (e: unknown) => void) => {
+        if (event === 'progress') this.onProgress = cb
+      }) }
+      onProgress?: (e: { lengthComputable: boolean; loaded: number; total: number }) => void
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const progressUpdates: number[] = []
+    const uploadPromise = api.uploadImageWithProgress(
+      new File(['data'], 'photo.jpg'),
+      (pct) => progressUpdates.push(pct),
+    )
+    const xhr = FakeXHR.instances[0]
+    xhr.onProgress?.({ lengthComputable: false, loaded: 50, total: 100 })
+
+    xhr.status = 201
+    xhr.responseText = JSON.stringify({ filename: 'gen.jpg' })
+    xhr.listeners['load']?.forEach(cb => cb())
+    await uploadPromise
+
+    expect(progressUpdates).toEqual([])
+  })
+
   it('uploadImageWithProgress rejects on a network error', async () => {
     const { auth, api } = setup()
     auth.logout()
@@ -431,6 +508,37 @@ describe('useApi', () => {
     await expect(uploadPromise).rejects.toThrow('Erreur 500')
   })
 
+  it('uploadImageWithProgress falls back to a status-code message when the error body has no error field', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16b' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.status = 500
+    xhr.responseText = '{}'
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Erreur 500')
+  })
+
   it('getApiKeys requests the right URL and returns the keys array', async () => {
     const { auth, api } = setup()
     auth.logout()
@@ -446,6 +554,16 @@ describe('useApi', () => {
     const [url] = fetchMock.mock.calls[1]
     expect(url).toBe('/api/keys')
     expect(result).toEqual([{ id: '1', name: 'AbView', createdAt: 123 }])
+  })
+
+  it('getApiKeys throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13b' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 })
+    await expect(api.getApiKeys()).rejects.toThrow('Erreur chargement des clés')
   })
 
   it('createApiKey posts the name and returns the created key', async () => {
@@ -474,6 +592,16 @@ describe('useApi', () => {
 
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'name required' }) })
     await expect(api.createApiKey('')).rejects.toThrow('name required')
+  })
+
+  it('createApiKey falls back to a generic message when the server sends none', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15b' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) })
+    await expect(api.createApiKey('x')).rejects.toThrow('Erreur création de la clé')
   })
 
   it('deleteApiKey sends a DELETE to the right URL', async () => {
