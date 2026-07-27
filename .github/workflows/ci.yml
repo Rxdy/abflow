@@ -59,3 +59,53 @@ jobs:
         with:
           name: playwright-report
           path: frontend/test-results/
+
+  build-and-push:
+    name: Build & push des images (GHCR)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pas de build multi-stage --platform=$BUILDPLATFORM ici (contrairement à
+      # charlene) : les Dockerfiles backend/frontend exécutent npm install/build
+      # directement dans l'étape finale, donc l'émulation QEMU est nécessaire
+      # pour produire une image arm64 (le Pi qui héberge le site) depuis un
+      # runner GitHub amd64.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Connexion à GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Nom d'image (en minuscules)
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/abflow-${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build et push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
