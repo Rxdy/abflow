@@ -63,19 +63,17 @@ describe('AppHeader storage bar', () => {
     expect(fill?.className).toContain('storage-bar-fill--danger')
   })
 
-  it('shows the exact byte counts in the hover tooltip, unlike the rounded label', async () => {
+  it('shows the exact percentage in the hover tooltip, unlike the rounded label', async () => {
     // 4 161 489 o utilisés sur un quota de 2 097 152 000 o — les deux arrondissent
     // à "1.95 Go" restants avec formatSize(), d'où la confusion à l'origine de ce test.
+    // Les octets bruts s'avérant illisibles au hover, seul le pourcentage est affiché.
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ count: 3, totalSize: 4_161_489, byType: {}, quotaBytes: 2_097_152_000 }),
     })
     await mount()
     const bar = document.querySelector('.storage-bar')
-    const n = (x: number) => x.toLocaleString('fr-FR')
-    expect(bar?.getAttribute('title')).toBe(
-      `${n(4_161_489)} o utilisés sur ${n(2_097_152_000)} o (${n(2_092_990_511)} o restants) — 0.20 %`,
-    )
+    expect(bar?.getAttribute('title')).toBe('0.20 % utilisés')
   })
 })
 

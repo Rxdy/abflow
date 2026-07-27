@@ -54,7 +54,7 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => cleanup())
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('TimelineView', () => {
   it('shows a spinner while loading', async () => {
@@ -181,7 +181,7 @@ describe('TimelineView', () => {
     await flushPromises()
 
     await fireEvent.click(document.querySelector('.file-cell')!)
-    expect(document.querySelector('.lb-date')!.textContent).toMatch(/2\.0 Mo/)
+    expect(document.querySelector('.lb-meta')!.textContent).toMatch(/2\.0 Mo/)
   })
 
   it('shows the image dimensions in the lightbox when known', async () => {
@@ -191,7 +191,7 @@ describe('TimelineView', () => {
     await flushPromises()
 
     await fireEvent.click(document.querySelector('.file-cell')!)
-    expect(document.querySelector('.lb-date')!.textContent).toMatch(/1920×1080/)
+    expect(document.querySelector('.lb-meta')!.textContent).toMatch(/1920×1080/)
   })
 
   it('omits dimensions from the lightbox when unknown', async () => {
@@ -201,7 +201,7 @@ describe('TimelineView', () => {
     await flushPromises()
 
     await fireEvent.click(document.querySelector('.file-cell')!)
-    expect(document.querySelector('.lb-date')!.textContent).not.toContain('×')
+    expect(document.querySelector('.lb-meta')!.textContent).not.toContain('×')
   })
 
   it('uses the original filename as the download button title when available', async () => {
@@ -256,6 +256,39 @@ describe('TimelineView', () => {
 
     expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${window.location.origin}/share/xyz`)
+    await waitFor(() => expect(screen.getByText('Lien copié !')).toBeTruthy())
+  })
+
+  it('copies via ClipboardItem when available — the Safari-safe path', async () => {
+    // Sur Safari, clipboard.write() doit être appelé de façon synchrone dans le
+    // geste utilisateur pour être autorisé — passer une Promise comme donnée du
+    // ClipboardItem permet de résoudre le lien créé côté serveur après coup sans
+    // perdre cette autorisation. C'est ce chemin qu'on vérifie ici.
+    const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    createShareLink.mockResolvedValue({ url: '/share/xyz', expiresAt: 123 })
+
+    class FakeClipboardItem {
+      data: Record<string, Promise<Blob> | Blob | string>
+      constructor(data: Record<string, Promise<Blob> | Blob | string>) { this.data = data }
+    }
+    const writeMock = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { write: writeMock, writeText: vi.fn() },
+      configurable: true,
+    })
+
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(screen.getByTitle('Partager'))
+    await flushPromises()
+
+    expect(writeMock).toHaveBeenCalledTimes(1)
+    const [item] = writeMock.mock.calls[0][0] as [FakeClipboardItem]
+    const blob = await (item.data['text/plain'] as Promise<Blob>)
+    expect(await blob.text()).toBe(`${window.location.origin}/share/xyz`)
     await waitFor(() => expect(screen.getByText('Lien copié !')).toBeTruthy())
   })
 

@@ -4,10 +4,3 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(1) + ' Mo'
   return (bytes / 1024 ** 3).toFixed(2) + ' Go'
 }
-
-// Nombre d'octets exact, sans arrondi — utile là où formatSize() masque de
-// petites variations (ex: quota de plusieurs Go où quelques Mo ne se voient
-// pas à 2 décimales).
-export function formatSizeExact(bytes: number): string {
-  return `${bytes.toLocaleString('fr-FR')} o`
-}

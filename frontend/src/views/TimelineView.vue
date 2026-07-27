@@ -182,9 +182,10 @@
           </svg>
         </button>
         <div class="lb-info">
-          <span class="lb-date">
+          <span class="lb-meta">
             {{ formatDateTime(lightbox.uploadedAt) }} · {{ formatSize(lightbox.size) }}<template v-if="lightbox.width && lightbox.height"> · {{ lightbox.width }}×{{ lightbox.height }}</template>
           </span>
+          <div class="lb-actions">
           <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ imageFiles.length }}</span>
           <button class="lb-dl" title="Renommer" @click="openRename(lightbox)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
@@ -206,6 +207,7 @@
               <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
             </svg>
           </button>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -232,8 +234,8 @@
           </button>
         </div>
         <div class="lb-info">
-          <span class="lb-date">{{ displayNameOf(mediaFile) }}</span>
-          <span class="lb-counter">{{ formatSize(mediaFile.size) }}</span>
+          <span class="lb-meta">{{ displayNameOf(mediaFile) }} · {{ formatSize(mediaFile.size) }}</span>
+          <div class="lb-actions">
           <button class="lb-dl" title="Renommer" @click="openRename(mediaFile)">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -254,6 +256,7 @@
               <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
             </svg>
           </button>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -522,9 +525,20 @@ function formatDateTime(ts: number): string {
 let copyToastTimer: ReturnType<typeof setTimeout> | null = null
 async function shareFile(f: FileEntry): Promise<void> {
   try {
-    const { url } = await createShareLink(f.filename)
-    const fullUrl = `${window.location.origin}${url}`
-    await navigator.clipboard.writeText(fullUrl)
+    const urlPromise = createShareLink(f.filename).then(({ url }) => `${window.location.origin}${url}`)
+    if (typeof ClipboardItem !== 'undefined') {
+      // Safari (et les navigateurs récents suivant le même standard) exigent que
+      // clipboard.write() soit appelé de façon synchrone dans le geste utilisateur,
+      // sans await avant — sinon la copie échoue silencieusement (pas d'erreur
+      // visible, juste rien dans le presse-papier). Passer une Promise comme
+      // donnée du ClipboardItem permet de résoudre le lien en différé (après
+      // l'aller-retour réseau qui le crée) sans perdre cette autorisation.
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'text/plain': urlPromise.then(u => new Blob([u], { type: 'text/plain' })) }),
+      ])
+    } else {
+      await navigator.clipboard.writeText(await urlPromise)
+    }
     if (copyToastTimer) clearTimeout(copyToastTimer)
     copyToast.value = 'Lien copié !'
     copyToastTimer = setTimeout(() => { copyToast.value = '' }, 3000)
@@ -785,10 +799,17 @@ onUnmounted(() => {
 .lb-prev { left: .75rem; top: 50%; transform: translateY(-50%); }
 .lb-next { right: .75rem; top: 50%; transform: translateY(-50%); }
 .lb-info {
-  position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 1rem; background: rgba(0,0,0,.6); border-radius: 9999px; padding: .375rem .875rem;
+  position: absolute; bottom: 1rem; left: 1rem; right: 1rem;
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+  max-width: 26rem; margin: 0 auto;
+  background: rgba(0,0,0,.65); border-radius: 1.25rem; padding: .625rem 1.125rem;
 }
-.lb-date, .lb-counter { font-size: .75rem; color: #94a3b8; }
+.lb-meta {
+  font-size: .75rem; color: #94a3b8; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.lb-actions { display: flex; align-items: center; gap: 1rem; }
+.lb-counter { font-size: .8125rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; }
 
 /* Media viewer */
 .lb-media { max-width: 95vw; max-height: 80dvh; border-radius: .5rem; outline: none; }
