@@ -1,7 +1,10 @@
 <template>
   <header class="app-header">
     <div class="app-header-row">
-      <span class="app-header-name">{{ appName }}</span>
+      <div class="app-header-brand">
+        <img src="/icons/icon-192.png" alt="" class="app-header-logo" width="24" height="24" />
+        <span class="app-header-name">{{ appName }}</span>
+      </div>
       <div v-if="isAuth" class="app-header-actions">
         <RouterLink to="/settings" class="app-header-btn app-header-btn--settings" title="Clés API">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
@@ -127,6 +130,19 @@ const storageTitle = computed(() => {
   font-size: 0.6875rem;
   color: #64748b;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-header-logo {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
   flex-shrink: 0;
 }
 

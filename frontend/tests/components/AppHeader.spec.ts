@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/vue'
+import { render, screen, cleanup, fireEvent } from '@testing-library/vue'
 import { flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import AppHeader from '../../src/components/AppHeader.vue'
@@ -92,5 +92,18 @@ describe('AppHeader settings link', () => {
     })
     await mount()
     expect(screen.getByTitle('Clés API').getAttribute('href')).toBe('/settings')
+  })
+
+  it('logs out when the logout button is clicked', async () => {
+    const { result: auth } = setupWithRouter(() => useAuth())
+    auth.token.value = 'tok_test'
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ count: 0, totalSize: 0, byType: {}, quotaBytes: null }),
+    })
+    await mount()
+
+    await fireEvent.click(screen.getByTitle('Déconnexion'))
+    expect(auth.token.value).toBeNull()
   })
 })

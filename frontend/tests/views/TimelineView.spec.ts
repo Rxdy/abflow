@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/vue'
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/vue'
 import { flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import type { FileEntry } from '../../src/types'
@@ -48,6 +48,7 @@ beforeEach(() => {
   deleteImages.mockReset()
   downloadFile.mockReset()
   createShareLink.mockReset()
+  renameFile.mockReset()
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
     configurable: true,
@@ -450,6 +451,332 @@ describe('TimelineView', () => {
       window.dispatchEvent(new Event('focus'))
       await flushPromises()
       expect(getImages).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('remaining coverage: secondary buttons, error paths, swipe, day labels', () => {
+    it('sorts files by size', async () => {
+      const files = [
+        makeFile({ filename: '1700000000000-a1-small.pdf', fileType: 'document', size: 100 }),
+        makeFile({ filename: '1700000000000-b2-big.pdf', fileType: 'document', size: 9999 }),
+      ]
+      getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.update(screen.getByDisplayValue('Date'), 'size')
+      const names = [...document.querySelectorAll('.doc-name')].map(n => n.textContent)
+      expect(names).toEqual(['big', 'small'])
+    })
+
+    it('clears the search query via the clear button', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-holiday.jpg', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      const input = screen.getByPlaceholderText('Rechercher…') as HTMLInputElement
+      await fireEvent.update(input, 'nothing-matches')
+      expect(document.querySelectorAll('.doc-item, .file-cell').length).toBe(0)
+
+      await fireEvent.click(screen.getByText('✕'))
+      expect(input.value).toBe('')
+      expect(document.querySelectorAll('.doc-item, .file-cell').length).toBe(1)
+    })
+
+    it('selects a document via its own checkbox', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-checkbox')!)
+      expect(screen.getByText('1 sélectionné')).toBeTruthy()
+    })
+
+    it('navigates back to the previous image in the lightbox', async () => {
+      const files = [
+        makeFile({ filename: '1700000000000-a1-1.jpg' }),
+        makeFile({ filename: '1700000000000-b2-2.jpg' }),
+      ]
+      getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelectorAll('.file-cell')[0])
+      await fireEvent.click(document.querySelector('.lb-next')!)
+      expect(screen.getByText('2 / 2')).toBeTruthy()
+
+      await fireEvent.click(document.querySelector('.lb-prev')!)
+      expect(screen.getByText('1 / 2')).toBeTruthy()
+    })
+
+    it('opens rename, share and download from the image lightbox itself', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      renameFile.mockResolvedValue({ displayName: 'Photo' })
+      createShareLink.mockResolvedValue({ url: '/share/xyz', expiresAt: 123 })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.file-cell')!)
+
+      await fireEvent.click(screen.getByTitle('Renommer'))
+      expect(document.querySelector('.rename-input')).toBeTruthy()
+      await fireEvent.click(screen.getByText('Annuler'))
+
+      await fireEvent.click(screen.getByTitle('Partager'))
+      await flushPromises()
+      expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
+
+      await fireEvent.click(screen.getByTitle(files[0].filename))
+      expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
+    })
+
+    it('closes the media viewer with the close button', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      expect(document.querySelector('.lightbox')).toBeTruthy()
+
+      await fireEvent.click(document.querySelector('.lb-close')!)
+      expect(document.querySelector('.lightbox')).toBeNull()
+    })
+
+    it('cancels the bulk-delete confirmation without deleting', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      await fireEvent.click(screen.getByText('Supprimer'))
+      await fireEvent.click(screen.getByText('Annuler'))
+
+      expect(document.querySelector('.dialog-overlay')).toBeNull()
+      expect(deleteImages).not.toHaveBeenCalled()
+    })
+
+    it('cancels the rename dialog without saving', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(screen.getByTitle('Renommer'))
+      await fireEvent.click(screen.getByText('Annuler'))
+
+      expect(document.querySelector('.rename-input')).toBeNull()
+      expect(renameFile).not.toHaveBeenCalled()
+    })
+
+    it('shows an error message when renaming fails', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      renameFile.mockRejectedValue(new Error('Erreur renommage'))
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(screen.getByTitle('Renommer'))
+      await fireEvent.click(screen.getByText('Enregistrer'))
+      await flushPromises()
+
+      expect(screen.getByRole('alert').textContent).toMatch(/Erreur renommage/)
+    })
+
+    it('shows an error message when the bulk delete fails', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      deleteImages.mockRejectedValue(new Error('Erreur suppression'))
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      await fireEvent.click(screen.getByText('Supprimer'))
+      await fireEvent.click(document.querySelector('.btn-danger')!)
+      await flushPromises()
+
+      expect(screen.getByText('Erreur suppression')).toBeTruthy()
+    })
+
+    it('shows an error toast when sharing fails', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      createShareLink.mockRejectedValue(new Error('network down'))
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(screen.getByTitle('Partager'))
+      await flushPromises()
+
+      await waitFor(() => expect(screen.getByText('Erreur de partage')).toBeTruthy())
+    })
+
+    it('shows an error message when the manual refresh fails', async () => {
+      getImages.mockResolvedValueOnce({ total: 0, limit: 50, offset: 0, images: [] })
+      await mount()
+      await flushPromises()
+
+      getImages.mockRejectedValueOnce(new Error('Erreur chargement fichiers'))
+      await fireEvent.click(screen.getByTitle('Rafraîchir'))
+      await flushPromises()
+
+      expect(screen.getByText('Erreur chargement fichiers')).toBeTruthy()
+    })
+
+    it('auto-refreshes when the tab becomes visible again', async () => {
+      getImages.mockResolvedValue({ total: 0, limit: 50, offset: 0, images: [] })
+      await mount()
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(1)
+
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await flushPromises()
+
+      expect(getImages).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not auto-refresh when the tab becomes hidden', async () => {
+      getImages.mockResolvedValue({ total: 0, limit: 50, offset: 0, images: [] })
+      await mount()
+      await flushPromises()
+      expect(getImages).toHaveBeenCalledTimes(1)
+
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await flushPromises()
+
+      expect(getImages).toHaveBeenCalledTimes(1)
+    })
+
+    it('swipes left/right to navigate the lightbox, ignoring small movements', async () => {
+      const files = [
+        makeFile({ filename: '1700000000000-a1-1.jpg' }),
+        makeFile({ filename: '1700000000000-b2-2.jpg' }),
+      ]
+      getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelectorAll('.file-cell')[0])
+      const lb = document.querySelector('.lightbox')!
+
+      // Petit mouvement (< 50px) — ignoré, on reste sur la même image.
+      await fireEvent.touchStart(lb, { changedTouches: [{ clientX: 200 }] })
+      await fireEvent.touchEnd(lb, { changedTouches: [{ clientX: 190 }] })
+      expect(screen.getByText('1 / 2')).toBeTruthy()
+
+      // Swipe vers la gauche — image suivante.
+      await fireEvent.touchStart(lb, { changedTouches: [{ clientX: 200 }] })
+      await fireEvent.touchEnd(lb, { changedTouches: [{ clientX: 100 }] })
+      expect(screen.getByText('2 / 2')).toBeTruthy()
+
+      // Swipe vers la droite — image précédente.
+      await fireEvent.touchStart(lb, { changedTouches: [{ clientX: 100 }] })
+      await fireEvent.touchEnd(lb, { changedTouches: [{ clientX: 200 }] })
+      expect(screen.getByText('1 / 2')).toBeTruthy()
+    })
+
+    it('closes the image lightbox when clicking the backdrop itself', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.file-cell')!)
+      const lb = document.querySelector('.lightbox')!
+      await fireEvent.click(lb) // le backdrop lui-même, pas un enfant (image/boutons)
+      expect(document.querySelector('.lightbox')).toBeNull()
+    })
+
+    it('opens rename, share and download from inside the media viewer itself', async () => {
+      // Le doc-item a ses propres boutons Renommer/Partager identiques dans la
+      // liste — ceux-ci sont distincts et vérifiés séparément par ailleurs. Ici
+      // on cible spécifiquement ceux du lecteur média une fois ouvert.
+      const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      renameFile.mockResolvedValue({ displayName: 'Vidéo' })
+      createShareLink.mockResolvedValue({ url: '/share/xyz', expiresAt: 123 })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      const viewer = within(document.querySelector('.lightbox')!)
+
+      await fireEvent.click(viewer.getByTitle('Renommer'))
+      expect(document.querySelector('.rename-input')).toBeTruthy()
+      await fireEvent.click(screen.getByText('Annuler'))
+
+      await fireEvent.click(viewer.getByTitle('Partager'))
+      await flushPromises()
+      expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
+
+      const downloadBtn = document.querySelector('.lightbox .lb-actions .lb-dl:last-child')!
+      await fireEvent.click(downloadBtn)
+      expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
+    })
+
+    it('closes the media viewer when clicking the backdrop itself', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-clip.mp4', fileType: 'video' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.doc-item')!)
+      const lb = document.querySelector('.lightbox')!
+      await fireEvent.click(lb)
+      expect(document.querySelector('.lightbox')).toBeNull()
+    })
+
+    it('closes the delete confirmation when clicking the backdrop itself', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-1.jpg' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(document.querySelector('.cell-checkbox')!)
+      await fireEvent.click(screen.getByText('Supprimer'))
+      const overlay = document.querySelector('.dialog-overlay')!
+      await fireEvent.click(overlay)
+
+      expect(document.querySelector('.dialog-overlay')).toBeNull()
+      expect(deleteImages).not.toHaveBeenCalled()
+    })
+
+    it('closes the rename dialog when clicking the backdrop itself', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(screen.getByTitle('Renommer'))
+      const overlay = document.querySelector('.dialog-overlay')!
+      await fireEvent.click(overlay)
+
+      expect(document.querySelector('.rename-input')).toBeNull()
+      expect(renameFile).not.toHaveBeenCalled()
+    })
+
+    it('labels yesterday\'s and older groups correctly', async () => {
+      const now = new Date()
+      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+      const lastWeek = new Date(now); lastWeek.setDate(now.getDate() - 10)
+
+      const files = [
+        makeFile({ filename: '1700000000001-a1-1.jpg', fileType: 'document', uploadedAt: yesterday.getTime() }),
+        makeFile({ filename: '1700000000002-b2-2.jpg', fileType: 'document', uploadedAt: lastWeek.getTime() }),
+      ]
+      getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+      await mount()
+      await flushPromises()
+
+      expect(screen.getByText('Hier')).toBeTruthy()
+      const expected = lastWeek.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      expect(screen.getByText(expected)).toBeTruthy()
     })
   })
 })

@@ -39,6 +39,14 @@ describe('useAuth', () => {
     expect(localStorage.getItem('auth_token')).toBeNull()
   })
 
+  it('login falls back to a generic message when the server sends none', async () => {
+    const { result: auth } = setupWithRouter(useAuth)
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) })
+
+    await expect(auth.login('admin', 'wrong')).rejects.toThrow('Login failed')
+  })
+
   it('logout clears the token and redirects to login with the expired flag', async () => {
     const { result: auth, router } = setupWithRouter(useAuth)
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_abc' }) })
