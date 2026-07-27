@@ -80,23 +80,26 @@
           <span class="day-count">{{ group.files.length }}</span>
         </div>
 
-        <!-- Image grid for groups with images/videos -->
-        <div v-if="hasImages(group)" class="image-grid">
+        <!-- Image grid for groups with images/videos/audio/PDFs — everything that
+             gets a lightbox-style viewer, unified selection UX -->
+        <div v-if="hasGridFiles(group)" class="image-grid">
           <template v-for="f in group.files" :key="f.filename">
-            <div v-if="f.fileType === 'image' || f.fileType === 'video'"
+            <div v-if="isGridFile(f)"
               class="file-cell"
               :class="{ 'file-cell--selected': selected.has(f.filename) }"
               @click="onCellClick(f)"
             >
               <img v-if="f.fileType === 'image'" :src="mediaUrl(f.url)" :alt="displayNameOf(f)" loading="lazy" />
-              <template v-else>
-                <video :src="mediaUrl(f.url) + '#t=0.1'" class="cell-video-thumb" preload="metadata" muted playsinline></video>
-                <div class="cell-play-badge">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </div>
-              </template>
+              <video v-else-if="f.fileType === 'video'" :src="mediaUrl(f.url) + '#t=0.1'"
+                class="cell-video-thumb" preload="metadata" muted playsinline></video>
+              <div v-else class="cell-icon-tile" :class="`cell-icon-tile--${f.fileType}`">
+                <span class="cell-icon-emoji">{{ typeIcon(f.fileType) }}</span>
+              </div>
+              <div v-if="f.fileType === 'video'" class="cell-play-badge">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
               <div class="cell-checkbox" @click.stop="toggleSelect(f.filename)">
                 <div class="checkbox" :class="{ checked: selected.has(f.filename) }">
                   <svg v-if="selected.has(f.filename)" xmlns="http://www.w3.org/2000/svg"
@@ -110,10 +113,10 @@
           </template>
         </div>
 
-        <!-- Doc list for non-image/video files -->
+        <!-- Doc list for everything without a grid/viewer treatment (archives, non-PDF docs…) -->
         <div class="doc-list">
           <template v-for="f in group.files" :key="f.filename">
-            <div v-if="f.fileType !== 'image' && f.fileType !== 'video'"
+            <div v-if="!isGridFile(f)"
               class="doc-item"
               :class="{ 'doc-item--selected': selected.has(f.filename) }"
               @click="onDocClick(f)"
@@ -402,8 +405,16 @@ const groups = computed((): DayGroup[] => {
   return [...map.values()]
 })
 
-function hasImages(group: DayGroup): boolean {
-  return group.files.some(f => f.fileType === 'image' || f.fileType === 'video')
+// Fichiers qui ont un aperçu/lecteur dédié (image, vidéo, audio, PDF) — vont
+// dans la grille façon photos avec sélection unifiée. Le reste (archives,
+// documents non-PDF…) n'a rien à prévisualiser et reste dans la liste.
+function isGridFile(f: FileEntry): boolean {
+  if (f.fileType === 'image' || f.fileType === 'video' || f.fileType === 'audio') return true
+  return f.fileType === 'document' && f.filename.toLowerCase().endsWith('.pdf')
+}
+
+function hasGridFiles(group: DayGroup): boolean {
+  return group.files.some(isGridFile)
 }
 
 async function fetchFiles(offset = 0): Promise<void> {
@@ -442,7 +453,7 @@ function onVisibilityChange(): void {
 
 function onCellClick(f: FileEntry): void {
   if (selected.value.size > 0) { toggleSelect(f.filename); return }
-  if (f.fileType === 'video') { mediaFile.value = f; return }
+  if (f.fileType !== 'image') { mediaFile.value = f; return }
   lightboxIndex.value = imageFiles.value.findIndex(i => i.filename === f.filename)
   lightbox.value = f
 }
@@ -748,6 +759,14 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
 }
+
+/* Audio / PDF — pas d'aperçu visuel possible, une tuile avec l'icône du type */
+.cell-icon-tile {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+}
+.cell-icon-tile--audio { background: linear-gradient(160deg, #312e81 0%, #1e1b4b 100%); }
+.cell-icon-tile--document { background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%); }
+.cell-icon-emoji { font-size: 1.75rem; }
 
 .cell-checkbox { position: absolute; top: .3rem; left: .3rem; padding: .2rem; }
 .checkbox {

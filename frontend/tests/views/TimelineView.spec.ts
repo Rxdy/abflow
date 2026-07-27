@@ -82,10 +82,10 @@ describe('TimelineView', () => {
     expect(screen.getByText('Ajouter un fichier').closest('a')?.getAttribute('href')).toBe('/upload')
   })
 
-  it('renders images in a grid and other files in a doc list', async () => {
+  it('renders images in a grid and non-previewable files in a doc list', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-photo.jpg', fileType: 'image' }),
-      makeFile({ filename: '1700000000000-b2-report.pdf', fileType: 'document', size: 2048 }),
+      makeFile({ filename: '1700000000000-b2-archive.zip', fileType: 'archive', size: 2048 }),
     ]
     getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
     await mount()
@@ -93,13 +93,38 @@ describe('TimelineView', () => {
 
     expect(document.querySelectorAll('.file-cell').length).toBe(1)
     expect(document.querySelectorAll('.doc-item').length).toBe(1)
-    expect(screen.getByText('report')).toBeTruthy()
+    expect(screen.getByText('archive')).toBeTruthy()
+  })
+
+  it('puts PDFs and audio in the grid too, not the doc list', async () => {
+    const files = [
+      makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' }),
+      makeFile({ filename: '1700000000000-b2-song.mp3', fileType: 'audio' }),
+    ]
+    getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(document.querySelectorAll('.file-cell').length).toBe(2)
+    expect(document.querySelectorAll('.doc-item').length).toBe(0)
+    expect(document.querySelectorAll('.cell-icon-tile--document').length).toBe(1)
+    expect(document.querySelectorAll('.cell-icon-tile--audio').length).toBe(1)
+  })
+
+  it('keeps non-PDF documents in the doc list (no preview available)', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-notes.docx', fileType: 'document' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(document.querySelectorAll('.doc-item').length).toBe(1)
+    expect(document.querySelectorAll('.file-cell').length).toBe(0)
   })
 
   it('filters files by type via the filter chips', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-a.jpg', fileType: 'image' }),
-      makeFile({ filename: '1700000000000-b2-b.pdf', fileType: 'document', size: 5000 }),
+      makeFile({ filename: '1700000000000-b2-b.docx', fileType: 'document', size: 5000 }),
     ]
     getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
     await mount()
@@ -132,14 +157,13 @@ describe('TimelineView', () => {
     await flushPromises()
 
     await fireEvent.update(screen.getByPlaceholderText('Rechercher…'), 'invoice')
-    expect(document.querySelectorAll('.doc-item').length).toBe(1)
-    expect(screen.getByText('invoice')).toBeTruthy()
+    expect(document.querySelectorAll('.file-cell').length).toBe(1)
   })
 
   it('sorts files by name', async () => {
     const files = [
-      makeFile({ filename: '1700000000000-a1-zebra.pdf', fileType: 'document' }),
-      makeFile({ filename: '1700000000000-b2-apple.pdf', fileType: 'document' }),
+      makeFile({ filename: '1700000000000-a1-zebra.docx', fileType: 'document' }),
+      makeFile({ filename: '1700000000000-b2-apple.docx', fileType: 'document' }),
     ]
     getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
     await mount()
@@ -263,7 +287,8 @@ describe('TimelineView', () => {
     await mount()
     await flushPromises()
 
-    await fireEvent.click(screen.getByTitle('Partager'))
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Partager'))
     await flushPromises()
 
     expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
@@ -294,7 +319,8 @@ describe('TimelineView', () => {
     await mount()
     await flushPromises()
 
-    await fireEvent.click(screen.getByTitle('Partager'))
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Partager'))
     await flushPromises()
 
     expect(writeMock).toHaveBeenCalledTimes(1)
@@ -311,14 +337,15 @@ describe('TimelineView', () => {
     await mount()
     await flushPromises()
 
-    await fireEvent.click(screen.getByTitle('Renommer'))
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Renommer'))
     const input = document.querySelector('.rename-input') as HTMLInputElement
     await fireEvent.update(input, 'Facture juillet')
     await fireEvent.click(screen.getByText('Enregistrer'))
     await flushPromises()
 
     expect(renameFile).toHaveBeenCalledWith(files[0].filename, 'Facture juillet')
-    expect(screen.getByText('Facture juillet')).toBeTruthy()
+    expect(screen.getByText(/Facture juillet/)).toBeTruthy()
   })
 
   it('calls downloadFile when clicking the download button', async () => {
@@ -327,7 +354,9 @@ describe('TimelineView', () => {
     await mount()
     await flushPromises()
 
-    await fireEvent.click(screen.getByTitle(files[0].filename))
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    const downloadBtn = document.querySelector('.lightbox .lb-actions .lb-dl:last-child')!
+    await fireEvent.click(downloadBtn)
     expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
   })
 
@@ -389,7 +418,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       expect(document.querySelector('.lb-audio')?.tagName).toBe('AUDIO')
     })
 
@@ -399,7 +428,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       expect(document.querySelector('.lb-pdf')?.tagName).toBe('IFRAME')
     })
 
@@ -422,7 +451,7 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(document.querySelector('.doc-item')!)
+      await fireEvent.click(document.querySelector('.file-cell')!)
       expect(document.querySelector('.lb-meta')!.textContent).toMatch(/3\.0 Mo/)
     })
   })
@@ -468,8 +497,8 @@ describe('TimelineView', () => {
   describe('remaining coverage: secondary buttons, error paths, swipe, day labels', () => {
     it('sorts files by size', async () => {
       const files = [
-        makeFile({ filename: '1700000000000-a1-small.pdf', fileType: 'document', size: 100 }),
-        makeFile({ filename: '1700000000000-b2-big.pdf', fileType: 'document', size: 9999 }),
+        makeFile({ filename: '1700000000000-a1-small.docx', fileType: 'document', size: 100 }),
+        makeFile({ filename: '1700000000000-b2-big.docx', fileType: 'document', size: 9999 }),
       ]
       getImages.mockResolvedValue({ total: 2, limit: 50, offset: 0, images: files })
       await mount()
@@ -495,14 +524,34 @@ describe('TimelineView', () => {
       expect(document.querySelectorAll('.doc-item, .file-cell').length).toBe(1)
     })
 
-    it('selects a document via its own checkbox', async () => {
-      const files = [makeFile({ filename: '1700000000000-a1-report.pdf', fileType: 'document' })]
+    it('selects a doc-list item via its own checkbox', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-notes.docx', fileType: 'document' })]
       getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
       await mount()
       await flushPromises()
 
       await fireEvent.click(document.querySelector('.doc-checkbox')!)
       expect(screen.getByText('1 sélectionné')).toBeTruthy()
+    })
+
+    it('renames, shares and downloads directly from a doc-list row (non-PDF documents have no viewer)', async () => {
+      const files = [makeFile({ filename: '1700000000000-a1-notes.docx', fileType: 'document' })]
+      getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+      renameFile.mockResolvedValue({ displayName: 'Devis' })
+      createShareLink.mockResolvedValue({ url: '/share/xyz', expiresAt: 123 })
+      await mount()
+      await flushPromises()
+
+      await fireEvent.click(screen.getByTitle('Renommer'))
+      expect(document.querySelector('.rename-input')).toBeTruthy()
+      await fireEvent.click(screen.getByText('Annuler'))
+
+      await fireEvent.click(screen.getByTitle('Partager'))
+      await flushPromises()
+      expect(createShareLink).toHaveBeenCalledWith(files[0].filename)
+
+      await fireEvent.click(screen.getByTitle(files[0].filename))
+      expect(downloadFile).toHaveBeenCalledWith(files[0].filename, files[0].url)
     })
 
     it('navigates back to the previous image in the lightbox', async () => {
@@ -577,7 +626,8 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(screen.getByTitle('Renommer'))
+      await fireEvent.click(document.querySelector('.file-cell')!)
+      await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Renommer'))
       await fireEvent.click(screen.getByText('Annuler'))
 
       expect(document.querySelector('.rename-input')).toBeNull()
@@ -591,7 +641,8 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(screen.getByTitle('Renommer'))
+      await fireEvent.click(document.querySelector('.file-cell')!)
+      await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Renommer'))
       await fireEvent.click(screen.getByText('Enregistrer'))
       await flushPromises()
 
@@ -620,7 +671,8 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(screen.getByTitle('Partager'))
+      await fireEvent.click(document.querySelector('.file-cell')!)
+      await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Partager'))
       await flushPromises()
 
       await waitFor(() => expect(screen.getByText('Erreur de partage')).toBeTruthy())
@@ -761,7 +813,8 @@ describe('TimelineView', () => {
       await mount()
       await flushPromises()
 
-      await fireEvent.click(screen.getByTitle('Renommer'))
+      await fireEvent.click(document.querySelector('.file-cell')!)
+      await fireEvent.click(within(document.querySelector('.lightbox')!).getByTitle('Renommer'))
       const overlay = document.querySelector('.dialog-overlay')!
       await fireEvent.click(overlay)
 
