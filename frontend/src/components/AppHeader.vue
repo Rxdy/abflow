@@ -2,14 +2,24 @@
   <header class="app-header">
     <div class="app-header-row">
       <span class="app-header-name">{{ appName }}</span>
-      <button v-if="isAuth" class="app-header-logout" @click="() => logout()" title="Déconnexion">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-      </button>
+      <div v-if="isAuth" class="app-header-actions">
+        <RouterLink to="/settings" class="app-header-btn app-header-btn--settings" title="Clés API">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l1.8-1.8a1 1 0 0 0 0-1.4L18.6 4.3a1 1 0 0 0-1.4 0l-1.8 1.8a1 1 0 0 0 0 1.4Z"/>
+            <path d="m8.5 14.5-4.9 4.9a2 2 0 1 0 2.8 2.8l4.9-4.9"/>
+            <path d="m14 9-4.5 4.5"/>
+          </svg>
+        </RouterLink>
+        <button class="app-header-btn" @click="() => logout()" title="Déconnexion">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div v-if="storagePct !== null" class="storage-bar" :title="storageLabel">
       <div class="storage-bar-track">
@@ -22,6 +32,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStats } from '../composables/useStats'
 import { formatSize } from '../utils/format'
@@ -113,7 +124,13 @@ const storageLabel = computed(() => {
   letter-spacing: -0.02em;
 }
 
-.app-header-logout {
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-header-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -123,13 +140,19 @@ const storageLabel = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
   color: #64748b;
+  text-decoration: none;
   cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 
-.app-header-logout:hover {
+.app-header-btn:hover {
   color: #f87171;
   border-color: rgba(248, 113, 113, 0.3);
+}
+
+.app-header-btn--settings:hover {
+  color: #818cf8;
+  border-color: rgba(99, 102, 241, 0.3);
 }
 </style>

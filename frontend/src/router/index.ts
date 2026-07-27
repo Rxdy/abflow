@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import TimelineView from '../views/TimelineView.vue'
 import UploadView from '../views/UploadView.vue'
+import SettingsView from '../views/SettingsView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -29,6 +30,12 @@ const router = createRouter({
       path: '/upload',
       name: 'upload',
       component: UploadView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
       meta: { requiresAuth: true },
     },
     {

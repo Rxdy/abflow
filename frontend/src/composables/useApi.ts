@@ -1,5 +1,5 @@
 import { useAuth } from './useAuth'
-import type { FileEntry, ImagesResponse, Stats } from '../types'
+import type { ApiKey, ApiKeyCreated, FileEntry, ImagesResponse, Stats } from '../types'
 
 export function useApi() {
   const { authHeaders, logout, token } = useAuth()
@@ -125,5 +125,29 @@ export function useApi() {
     return data
   }
 
-  return { getImages, uploadImage, uploadImageWithProgress, deleteImages, renameFile, getStats, downloadFile, createShareLink, mediaUrl }
+  async function getApiKeys(): Promise<ApiKey[]> {
+    const res = await request('GET', '/api/keys')
+    if (!res?.ok) throw new Error('Erreur chargement des clés')
+    const data = (await res.json()) as { keys: ApiKey[] }
+    return data.keys
+  }
+
+  async function createApiKey(name: string): Promise<ApiKeyCreated> {
+    const res = await request('POST', '/api/keys', { name })
+    if (!res?.ok) {
+      const d = (await res!.json()) as { error?: string }
+      throw new Error(d.error ?? 'Erreur création de la clé')
+    }
+    return res.json() as Promise<ApiKeyCreated>
+  }
+
+  async function deleteApiKey(id: string): Promise<void> {
+    const res = await request('DELETE', `/api/keys/${id}`)
+    if (!res?.ok) throw new Error('Erreur suppression de la clé')
+  }
+
+  return {
+    getImages, uploadImage, uploadImageWithProgress, deleteImages, renameFile, getStats,
+    downloadFile, createShareLink, mediaUrl, getApiKeys, createApiKey, deleteApiKey,
+  }
 }
