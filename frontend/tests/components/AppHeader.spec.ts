@@ -49,7 +49,7 @@ describe('AppHeader storage bar', () => {
       json: async () => ({ count: 1, totalSize: 500_000_000, byType: {}, quotaBytes: 2_000_000_000 }),
     })
     await mount()
-    expect(screen.getByText(/restants sur 1\.86 Go/)).toBeTruthy()
+    expect(screen.getByText(/restants sur 1\.86 Go \(25 %\)/)).toBeTruthy()
   })
 
   it('flags the bar as danger past 90% usage', async () => {
