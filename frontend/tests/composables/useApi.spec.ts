@@ -255,6 +255,37 @@ describe('useApi', () => {
     await expect(uploadPromise).rejects.toThrow('Erreur réseau')
   })
 
+  it('uploadImageWithProgress surfaces the duplicate-file message on a 409', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'copy.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.status = 409
+    xhr.responseText = JSON.stringify({ error: 'Ce fichier existe déjà ("plage.jpg")', duplicateOf: 'plage.jpg' })
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Ce fichier existe déjà ("plage.jpg")')
+  })
+
   it('getApiKeys requests the right URL and returns the keys array', async () => {
     const { auth, api } = setup()
     auth.logout()

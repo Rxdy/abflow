@@ -5,7 +5,9 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs/promises'
+import { createReadStream } from 'fs'
 import { randomUUID, randomBytes, createHash } from 'crypto'
+import { imageSize } from 'image-size'
 import { createStorage } from './storage/index.js'
 
 // ── File type helpers ────────────────────────────────────────────────────────
@@ -22,6 +24,16 @@ function getFileType(filename) {
     if (re.test(filename)) return type
   }
   return 'other'
+}
+
+function hashFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256')
+    createReadStream(filePath)
+      .on('data', chunk => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')))
+      .on('error', reject)
+  })
 }
 
 const SHARE_DEFAULT_TTL = 24 * 60 * 60 * 1000 // 24h
@@ -102,16 +114,43 @@ export async function createApp() {
     return null
   }
 
+  // ── Métadonnées d'upload (nom original, MIME, dimensions, empreinte sha256) ──
+  // Le sha256 sert à détecter les doublons de contenu à l'upload — les fichiers
+  // uploadés avant l'ajout de cette fonctionnalité n'ont pas d'entrée ici, les
+  // champs correspondants restent simplement à null pour eux.
+  const META_FILE = '.file-meta.json'
+  let fileMeta = new Map() // filename → { originalName, mimeType, sha256, width, height }
+  try {
+    const raw = await Promise.resolve(storage.readTextFile(META_FILE))
+    if (raw) fileMeta = new Map(Object.entries(JSON.parse(raw)))
+  } catch { /* fichier absent ou corrompu — on repart d'une map vide */ }
+
+  async function saveFileMeta() {
+    await Promise.resolve(storage.writeTextFile(META_FILE, JSON.stringify(Object.fromEntries(fileMeta))))
+  }
+
+  function findDuplicateBySha256(hash) {
+    for (const [filename, meta] of fileMeta) if (meta.sha256 === hash) return filename
+    return null
+  }
+
   async function listFiles() {
     const raw = await Promise.resolve(storage.listFiles())
-    return raw.map(f => ({
-      filename: f.filename,
-      url: `/uploads/${f.filename}`,
-      uploadedAt: f.uploadedAt,
-      size: f.size,
-      fileType: getFileType(f.filename),
-      displayName: displayNames.get(f.filename) ?? null,
-    }))
+    return raw.map(f => {
+      const meta = fileMeta.get(f.filename) ?? {}
+      return {
+        filename: f.filename,
+        url: `/uploads/${f.filename}`,
+        uploadedAt: f.uploadedAt,
+        size: f.size,
+        fileType: getFileType(f.filename),
+        displayName: displayNames.get(f.filename) ?? null,
+        originalName: meta.originalName ?? null,
+        mimeType: meta.mimeType ?? null,
+        width: meta.width ?? null,
+        height: meta.height ?? null,
+      }
+    })
   }
 
   // ── Share tokens (in-memory, survivent au redémarrage) ──────────────────────
@@ -202,7 +241,15 @@ export async function createApp() {
     const fileType = getFileType(filename)
     if (req.authViaApiKey && fileType !== 'image') return res.status(404).json({ error: 'Not found' })
     const info = await Promise.resolve(storage.stat(filename))
-    res.json({ filename, url: `/uploads/${filename}`, ...info, fileType, displayName: displayNames.get(filename) ?? null })
+    const meta = fileMeta.get(filename) ?? {}
+    res.json({
+      filename, url: `/uploads/${filename}`, ...info, fileType,
+      displayName: displayNames.get(filename) ?? null,
+      originalName: meta.originalName ?? null,
+      mimeType: meta.mimeType ?? null,
+      width: meta.width ?? null,
+      height: meta.height ?? null,
+    })
   })
 
   app.patch('/api/images/:filename', jwtAuth, async (req, res) => {
@@ -224,10 +271,14 @@ export async function createApp() {
     for (const raw of filenames) {
       const name = path.basename(raw)
       const exists = await Promise.resolve(storage.exists(name))
-      if (exists) { await Promise.resolve(storage.delete(name)); displayNames.delete(name); deleted.push(name) }
-      else errors.push(name)
+      if (exists) {
+        await Promise.resolve(storage.delete(name))
+        displayNames.delete(name)
+        fileMeta.delete(name)
+        deleted.push(name)
+      } else errors.push(name)
     }
-    if (deleted.length > 0) await saveDisplayNames()
+    if (deleted.length > 0) { await saveDisplayNames(); await saveFileMeta() }
     res.json({ deleted, errors })
   })
 
@@ -237,7 +288,9 @@ export async function createApp() {
     if (!exists) return res.status(404).json({ error: 'Not found' })
     await Promise.resolve(storage.delete(filename))
     displayNames.delete(filename)
+    fileMeta.delete(filename)
     await saveDisplayNames()
+    await saveFileMeta()
     res.status(204).end()
   })
 
@@ -309,15 +362,43 @@ export async function createApp() {
         return res.status(413).json({ error: `Quota dépassé (max ${process.env.STORAGE_QUOTA_MB} Mo)` })
       }
     }
+
+    // Empreinte du contenu, calculée pendant que le fichier est encore sur le
+    // disque local (req.file.path) — vrai pour les deux backends de stockage,
+    // multer écrit toujours localement d'abord, même en SFTP (via un tmpdir).
+    const sha256 = await hashFile(req.file.path)
+    const duplicateOf = findDuplicateBySha256(sha256)
+    if (duplicateOf) {
+      await fs.unlink(req.file.path).catch(() => {})
+      const label = displayNames.get(duplicateOf) ?? duplicateOf
+      return res.status(409).json({ error: `Ce fichier existe déjà ("${label}")`, duplicateOf })
+    }
+
+    const fileType = getFileType(req.file.originalname)
+    let width = null, height = null
+    if (fileType === 'image') {
+      try {
+        const dim = imageSize(await fs.readFile(req.file.path))
+        width = dim.width
+        height = dim.height
+      } catch { /* format non supporté par image-size — pas bloquant */ }
+    }
+
     try {
       const { filename, size, uploadedAt } = await storage.saveUploadedFile(req)
+      fileMeta.set(filename, { originalName: req.file.originalname, mimeType: req.file.mimetype, sha256, width, height })
+      await saveFileMeta()
       res.status(201).json({
         filename,
         url: `/uploads/${filename}`,
         uploadedAt,
         size,
-        fileType: getFileType(filename),
+        fileType,
         displayName: null,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        width,
+        height,
       })
     } catch (err) {
       res.status(500).json({ error: err.message })

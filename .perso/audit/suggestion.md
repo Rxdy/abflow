@@ -1,41 +1,45 @@
 # Métadonnées de fichiers — pistes
 
-Audit rapide de ce qu'on pourrait afficher en plus dans les propriétés d'un
-fichier (lightbox, panneau détail), classé par coût d'implémentation. Rien
-d'implémenté ici sauf mention contraire — c'est une liste d'idées.
+Audit de ce qu'on pourrait afficher en plus dans les propriétés d'un fichier
+(lightbox, panneau détail), classé par coût d'implémentation.
 
 ## Déjà fait
 
 - [x] Taille exacte visible dans la lightbox image (ajouté suite à la confusion
-      sur la barre de quota — voir date du jour dans le changelog)
+      sur la barre de quota)
 - [x] Date/heure d'upload (`formatDateTime`)
 - [x] Nom d'affichage personnalisable (`displayName`, sans toucher au fichier physique)
 - [x] Type de fichier détecté par extension (`fileType`)
+- [x] **Nom de fichier original** — capturé à l'upload (`req.file.originalname`),
+      stocké dans `.file-meta.json`, utilisé comme titre du bouton téléchargement
+      dans la lightbox (`originalName ?? filename`). Uniquement pour les fichiers
+      uploadés après ce changement — pas de backfill des anciens.
+- [x] **Type MIME détaillé** — capturé à l'upload (`req.file.mimetype`), exposé
+      via l'API (`GET /api/images`, `/api/images/:filename`) mais pas encore
+      affiché dans l'UI (pas de demande spécifique dessus pour l'instant).
+- [x] **Dimensions image (largeur × hauteur)** — via [`image-size`](https://www.npmjs.com/package/image-size)
+      v2 (pur JS, pas de binding natif). Calculées à l'upload sur les fichiers
+      `fileType === 'image'` uniquement, lues depuis `req.file.path` avant le
+      transfert vers le storage backend (local ou SFTP). Affichées dans la
+      lightbox à côté de la taille. Échec de parsing (format non supporté)
+      non-bloquant : `width`/`height` restent `null`.
+- [x] **Checksum (sha256)** — calculé à l'upload (stream, pas de chargement
+      complet en mémoire), stocké dans `.file-meta.json`, **jamais exposé via
+      l'API** (usage interne uniquement pour la détection de doublons).
+- [x] **Détection de doublons à l'upload** (idée transverse validée) — un
+      upload dont le sha256 correspond à un fichier déjà présent est rejeté
+      avec `409 { error, duplicateOf }` et n'est jamais écrit sur le storage
+      final (ni compté dans le quota). Le message reprend le `displayName` du
+      fichier existant si personnalisé. Ré-uploader le même contenu redevient
+      possible après suppression de l'original (l'entrée `.file-meta.json`
+      est nettoyée par les deux endpoints DELETE, single et bulk).
 
-## Coût quasi nul (déjà dans `storage.stat()` / le nom de fichier, aucune dépendance)
+## Coût quasi nul restant
 
-- **Nom de fichier original** — utile pour retrouver la source une fois qu'un
-  `displayName` a été mis dessus. Actuellement invisible une fois renommé.
-- **Extension / type MIME détaillé** — `fileType` regroupe déjà par catégorie
-  (image/video/…), mais l'extension précise (`.heic` vs `.jpg`) n'est montrée
-  nulle part dans les détails, seulement dans le nom de fichier.
-- **Date de dernière modification** vs **date d'upload** — actuellement
-  `storage.stat()` ne remonte que `mtimeMs`, traité comme date d'upload. Pas
-  de distinction upload/modification, mais pas forcément utile tant qu'il n'y
-  a pas d'édition de fichier possible.
-
-## Coût faible (pure JS, pas de dépendance binaire/native)
-
-- **Dimensions image (largeur × hauteur)** — via un parseur d'en-têtes léger
-  type [`image-size`](https://www.npmjs.com/package/image-size) (pur JS, lit
-  juste les headers du fichier, pas de décodage complet ni de binding natif —
-  donc pas de souci de cross-compile arm64 sur le Pi). Calculé à l'upload et
-  stocké à côté de `displayNames`/`apiKeys` (même pattern `.json` via
-  `storage.readTextFile`/`writeTextFile`).
-- **Checksum (sha256)** — calculable au moment de l'upload avec `crypto`
-  (déjà utilisé pour les clés API). Permet de détecter les doublons (même
-  fichier uploadé deux fois sous des noms différents) et donne une empreinte
-  stable pour un futur système de sync/backup.
+- **Date de dernière modification** vs **date d'upload** — `storage.stat()`
+  ne remonte que `mtimeMs`, traité comme date d'upload. Pas de distinction
+  upload/modification, mais toujours pas utile tant qu'il n'y a pas d'édition
+  de fichier possible côté serveur.
 
 ## Coût moyen (nouvelle dépendance, à peser)
 
@@ -50,8 +54,10 @@ d'implémenté ici sauf mention contraire — c'est une liste d'idées.
   lourd à installer et faire tourner sur un Pi). Probablement pas rentable
   pour la valeur ajoutée — à ne considérer que si le besoin devient concret.
 
-## Idée transverse (pas une métadonnée en soi)
+## Idée transverse pas encore traitée
 
-- **Détection de doublons à l'upload** — si le hash sha256 est calculé, on
-  peut avertir "ce fichier existe déjà sous le nom X" avant même de finaliser
-  l'upload, plutôt que de le découvrir après coup en fouillant la liste.
+- **Avertissement de doublon dans l'UI d'upload** — le rejet 409 remonte déjà
+  proprement un message d'erreur exploitable côté frontend (testé), mais rien
+  d'affiné visuellement pour l'instant (pas de bouton "voir le fichier
+  existant" par ex.) — actuellement juste affiché comme n'importe quelle autre
+  erreur d'upload dans `UploadView`.
