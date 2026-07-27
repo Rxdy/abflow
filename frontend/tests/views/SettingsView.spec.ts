@@ -29,6 +29,10 @@ beforeEach(() => {
   getApiKeys.mockReset().mockResolvedValue([])
   createApiKey.mockReset()
   deleteApiKey.mockReset()
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    configurable: true,
+  })
 })
 
 afterEach(() => cleanup())
@@ -105,5 +109,44 @@ describe('SettingsView', () => {
 
     expect(deleteApiKey).toHaveBeenCalledWith('1')
     expect(screen.queryByText('AbView')).toBeNull()
+  })
+
+  it('surfaces an error message when the key list fails to load', async () => {
+    getApiKeys.mockRejectedValue(new Error('Erreur chargement des clés'))
+    mount()
+    await flushPromises()
+
+    expect(screen.getByRole('alert').textContent).toMatch(/Erreur chargement des clés/)
+  })
+
+  it('copies the revealed key to the clipboard', async () => {
+    createApiKey.mockResolvedValue({ id: '2', name: 'AbView', createdAt: Date.now(), key: 'abf_secret123' })
+    mount()
+    await flushPromises()
+
+    await fireEvent.update(screen.getByPlaceholderText(/Nom de la clé/), 'AbView')
+    await fireEvent.click(screen.getByText('Générer une clé'))
+    await flushPromises()
+
+    await fireEvent.click(screen.getByText('Copier'))
+    await flushPromises()
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('abf_secret123')
+    expect(screen.getByText('Copié !')).toBeTruthy()
+  })
+
+  it('surfaces an error message when revoking a key fails', async () => {
+    getApiKeys.mockResolvedValue([{ id: '1', name: 'AbView', createdAt: Date.now() }])
+    deleteApiKey.mockRejectedValue(new Error('Erreur suppression de la clé'))
+    mount()
+    await flushPromises()
+
+    await fireEvent.click(screen.getByTitle('Révoquer'))
+    await fireEvent.click(screen.getByText('Révoquer'))
+    await flushPromises()
+
+    expect(screen.getByRole('alert').textContent).toMatch(/Erreur suppression de la clé/)
+    // La clé reste dans la liste — la révocation a échoué côté serveur.
+    expect(screen.getByText('AbView')).toBeTruthy()
   })
 })

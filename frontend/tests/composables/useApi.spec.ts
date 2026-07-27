@@ -77,6 +77,59 @@ describe('useApi', () => {
     await expect(api.uploadImage(new File(['x'], 'photo.jpg'))).rejects.toThrow('Quota dépassé (max 2000 Mo)')
   })
 
+  it('uploadImage resolves with the created file on success', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3b' }) })
+    await auth.login('admin', 'secret')
+
+    const created = { filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 10, uploadedAt: 1, fileType: 'image' }
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => created })
+
+    await expect(api.uploadImage(new File(['x'], 'photo.jpg'))).resolves.toEqual(created)
+  })
+
+  it('renameFile patches the display name and returns it', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3c' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Vacances' }) })
+    const result = await api.renameFile('photo.jpg', 'Vacances')
+
+    const [url, opts] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/images/photo.jpg')
+    expect(opts.method).toBe('PATCH')
+    expect(JSON.parse(opts.body)).toEqual({ displayName: 'Vacances' })
+    expect(result).toEqual({ displayName: 'Vacances' })
+  })
+
+  it('renameFile throws on failure', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3d' }) })
+    await auth.login('admin', 'secret')
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+    await expect(api.renameFile('ghost.jpg', 'x')).rejects.toThrow('Erreur renommage')
+  })
+
+  it('mediaUrl appends the token as a query param so <img>/<video> tags can authenticate', async () => {
+    const { auth, api } = setup()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_media' }) })
+    await auth.login('admin', 'secret')
+
+    expect(api.mediaUrl('/uploads/photo.jpg')).toBe('/uploads/photo.jpg?token=tok_media')
+    expect(api.mediaUrl('/uploads/photo.jpg?key=abf_x')).toBe('/uploads/photo.jpg?key=abf_x&token=tok_media')
+  })
+
+  it('mediaUrl returns the URL unchanged when logged out', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    expect(api.mediaUrl('/uploads/photo.jpg')).toBe('/uploads/photo.jpg')
+  })
+
   it('getStats returns the parsed stats including quotaBytes', async () => {
     const { auth, api } = setup()
     auth.logout()
@@ -284,6 +337,98 @@ describe('useApi', () => {
     xhr.listeners['load']?.forEach(cb => cb())
 
     await expect(uploadPromise).rejects.toThrow('Ce fichier existe déjà ("plage.jpg")')
+  })
+
+  it('uploadImageWithProgress logs out and rejects on a 401', async () => {
+    const { auth, api } = setup()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_14' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.status = 401
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Session expirée')
+    expect(auth.token.value).toBeNull()
+  })
+
+  it('uploadImageWithProgress rejects with a generic message when the 201 body is malformed', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.status = 201
+    xhr.responseText = 'not json'
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Réponse invalide')
+  })
+
+  it('uploadImageWithProgress falls back to a status-code message when the error body is malformed', async () => {
+    const { auth, api } = setup()
+    auth.logout()
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16' }) })
+    await auth.login('admin', 'secret')
+
+    class FakeXHR {
+      static instances: FakeXHR[] = []
+      status = 0
+      responseText = ''
+      upload = { addEventListener: vi.fn() }
+      listeners: Record<string, Array<() => void>> = {}
+      open = vi.fn()
+      send = vi.fn()
+      setRequestHeader = vi.fn()
+      addEventListener(event: string, cb: () => void) {
+        (this.listeners[event] ??= []).push(cb)
+      }
+      constructor() { FakeXHR.instances.push(this) }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+
+    const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    const xhr = FakeXHR.instances[0]
+    xhr.status = 500
+    xhr.responseText = 'not json'
+    xhr.listeners['load']?.forEach(cb => cb())
+
+    await expect(uploadPromise).rejects.toThrow('Erreur 500')
   })
 
   it('getApiKeys requests the right URL and returns the keys array', async () => {
