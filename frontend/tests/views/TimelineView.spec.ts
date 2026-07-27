@@ -170,6 +170,16 @@ describe('TimelineView', () => {
     expect(document.querySelector('.lightbox')).toBeNull()
   })
 
+  it('shows the file size in the image lightbox', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-1.jpg', size: 2 * 1024 * 1024 })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    expect(document.querySelector('.lb-date')!.textContent).toMatch(/2\.0 Mo/)
+  })
+
   it('navigates the lightbox with keyboard arrows and closes on Escape', async () => {
     const files = [
       makeFile({ filename: '1700000000000-a1-1.jpg' }),
