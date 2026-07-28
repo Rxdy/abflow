@@ -34,6 +34,18 @@ Audit de ce qu'on pourrait afficher en plus dans les propriétés d'un fichier
       possible après suppression de l'original (l'entrée `.file-meta.json`
       est nettoyée par les deux endpoints DELETE, single et bulk).
 
+- [x] **Métadonnées EXIF (photos)** — via [`exifr`](https://www.npmjs.com/package/exifr)
+      v7 (pur JS). Extrait modèle d'appareil (`Make`+`Model`, dédupliqués si le
+      modèle répète déjà la marque) et date de prise de vue réelle
+      (`DateTimeOriginal`). **Le GPS n'est jamais lu** : `pick: ['Make', 'Model',
+      'DateTimeOriginal']` désactive le bloc GPS d'exifr à la source (il n'est
+      même pas parsé, pas juste filtré après coup) — vérifié avec une photo de
+      test contenant de vraies coordonnées GPS, absentes du résultat. Modèle
+      d'appareil affiché dans la lightbox ; la date de prise de vue est utilisée
+      pour grouper les photos par jour dans la timeline (`takenAt ?? uploadedAt`)
+      plutôt que la date d'upload — résout le cas "vieilles photos importées
+      d'un coup" qui motivait cette suggestion.
+
 ## Coût quasi nul restant
 
 - **Date de dernière modification** vs **date d'upload** — `storage.stat()`
@@ -43,13 +55,6 @@ Audit de ce qu'on pourrait afficher en plus dans les propriétés d'un fichier
 
 ## Coût moyen (nouvelle dépendance, à peser)
 
-- **Métadonnées EXIF (photos)** — via [`exifr`](https://www.npmjs.com/package/exifr)
-  (pur JS). Intéressant : modèle d'appareil/téléphone, date de prise de vue
-  réelle (différente de la date d'upload — utile pour trier de vieilles
-  photos importées d'un coup). **Attention vie privée** : l'EXIF contient
-  souvent des coordonnées GPS précises. Si on extrait l'EXIF, il faudrait soit
-  ne jamais exposer le GPS dans l'API/l'UI, soit le rendre opt-in explicite —
-  ne pas le stocker/afficher par défaut vu l'usage (photos personnelles/famille).
 - **Durée vidéo/audio** — nécessiterait `ffprobe`/ffmpeg (binaire externe,
   lourd à installer et faire tourner sur un Pi). Probablement pas rentable
   pour la valeur ajoutée — à ne considérer que si le besoin devient concret.

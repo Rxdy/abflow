@@ -4,7 +4,8 @@
 
 **Stack :** Node.js/Express · Vue 3 TypeScript · Docker Compose · nginx  
 **Auth :** single-user, bcrypt + JWT 24h + rate limiting  
-**Stockage :** local FS ou SFTP (configurable via `.env`)
+**Stockage :** local FS ou SFTP (configurable via `.env`)  
+**En ligne :** `https://abflow.rxdy.fr` (Traefik + Let's Encrypt + Watchtower sur le Pi)
 
 ---
 
@@ -14,7 +15,9 @@
 ## Phase 4 — Sécurité & robustesse ✅
 ## Phase 5 — Déploiement & infra ✅
 ## Phase 6 — Partage ✅
-## Intégration AbFlow ↔ AbView ✅
+## Phase 7 — Audit Sécurité ✅ (backend/nginx non-root frontend et audit deps frontend restants)
+## Phase 9 — Tests ✅ (102 backend + 154 frontend + e2e, ~99% de couverture)
+## Intégration AbFlow ↔ AbView ✅ (préparé, pas encore remergé — voir feature/photos-carrousel côté AbView)
 
 > Détail dans les sections archivées en bas de fichier.
 
@@ -22,51 +25,77 @@
 
 ---
 
-## Phase 7 — Audit Sécurité
+## Phase 7 — Audit Sécurité ✅ (l'essentiel fait, le site est public depuis)
 
-> Objectif : durcir le backend et l'infra avant toute exposition réseau (Raspberry Pi local = surface d'attaque réelle).
+> Objectif initial : durcir le backend et l'infra avant toute exposition réseau. Le
+> site est maintenant réellement public (`https://abflow.rxdy.fr`), donc cette phase
+> est passée de "précaution" à "réellement nécessaire" et a été traitée en priorité.
 
-### 7.1 Headers HTTP de sécurité (`helmet` + nginx)
+### 7.1 Headers HTTP de sécurité (`helmet` + nginx) ✅
 
-- [ ] Installer `helmet` dans Express — active automatiquement : `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `X-DNS-Prefetch-Control`
-- [ ] Ajouter HSTS dans `nginx.https.conf` (`Strict-Transport-Security: max-age=31536000`)
-- [ ] Ajouter `Content-Security-Policy` : autoriser uniquement `self` + blob: pour les previews
-- [ ] Ajouter `Permissions-Policy` (désactiver caméra, micro, géolocalisation)
+- [x] `helmet` dans Express — CSP, X-Content-Type-Options, X-Frame-Options,
+      Referrer-Policy, HSTS, tous actifs par défaut. `crossOriginResourcePolicy`
+      explicitement repassé à `cross-origin` (le défaut `same-origin` de helmet
+      aurait cassé l'usage même des clés API — une app externe comme AbView qui
+      charge des images cross-origin via `<img src="…?key=…">`)
+- [x] HSTS — vient de helmet côté backend ; pas ajouté séparément dans
+      `nginx.https.conf` (config HTTPS locale auto-signée, hors scope prod)
+- [x] `Content-Security-Policy` — défaut helmet (`default-src 'self'`), protège
+      surtout `/uploads/:filename` et `/share/:token` contre un SVG/HTML malveillant
+      uploadé puis ouvert directement (script embarqué qui s'exécuterait sinon)
+- [x] `Permissions-Policy` (caméra/micro/géoloc désactivés) — pas dans les
+      défauts de helmet 8, ajouté à la main
 
-### 7.2 JWT renforcé
+### 7.2 JWT renforcé ✅
 
-- [ ] Passer `{ algorithms: ['HS256'] }` à `jwt.verify()` — sans ça, l'algorithme `none` peut être accepté si l'attaquant forge un token
-- [ ] Logger un warning si `JWT_SECRET` fait moins de 32 caractères au démarrage
+- [x] `{ algorithms: ['HS256'] }` sur `jwt.verify()` — testé (rejette un token
+      forgé en `alg:"none"` et un token signé avec un autre algo)
+- [x] Warning au démarrage si `JWT_SECRET` fait moins de 32 caractères
 
-### 7.3 Rate limiting étendu
+### 7.3 Rate limiting étendu ✅
 
-- [ ] Ajouter un rate limiter sur `POST /api/images/upload` (ex. 20 req/min) — actuellement seul le login est limité
-- [ ] Ajouter un rate limiter sur `POST /api/share` (ex. 30 req/min) — éviter la génération massive de tokens
-- [ ] Limiter la taille du body JSON sur toutes les routes non-upload (`express.json({ limit: '1mb' })`)
+- [x] Rate limiter sur `POST /api/images/upload` (20 req/min)
+- [x] Rate limiter sur `POST /api/share` (30 req/min)
+- [x] `express.json({ limit: '1mb' })` sur toutes les routes JSON
 
-### 7.4 Nettoyage des share tokens
+### 7.4 Nettoyage des share tokens ✅
 
-- [ ] Ajouter un `setInterval` de purge toutes les heures — les tokens en mémoire ne sont jamais purgés actuellement (leak mémoire sur le long terme)
-- [ ] Optionnel : persister les tokens dans un fichier JSON pour survivre aux restarts
+- [x] `setInterval` de purge toutes les heures (`.unref()` pour ne pas bloquer
+      l'arrêt du process)
 
-### 7.5 Docker sécurisé (non-root)
+### 7.5 Docker sécurisé (non-root) — backend fait, frontend en attente
 
-- [ ] Backend `Dockerfile` : ajouter `USER node` avant `CMD` — actuellement le process tourne en root dans le conteneur
-- [ ] Frontend `Dockerfile` : utiliser `nginx:alpine-unprivileged` ou configurer nginx pour écouter sur le port 8080 en non-root
-- [ ] Passer l'image de base backend de `node:20-alpine` à `node:20-alpine` avec `--no-new-privileges`
+- [x] Backend : tourne en non-root (uid 1000, matche le propriétaire de
+      `~/abflow/uploads` sur le Pi — vérifié : upload/delete fonctionnent).
+      **Piège trouvé en testant** : les fichiers existants sur le Pi appartenaient
+      à root (créés par l'ancien conteneur root) — un `chown -R` sur le Pi est
+      nécessaire au moment du déploiement, sinon écriture cassée pour tout le monde.
+- [ ] Frontend : `nginx:alpine-slim` adopté (voir 8.x, gain de taille), mais pas
+      passé en non-root — demanderait de remapper le port d'écoute (80 → 8080,
+      requiert privilège root pour bind <1024) et de toucher au label Traefik en
+      prod. Risque de mauvaise config pour un gain sécurité faible (nginx ne fait
+      que servir du statique + proxy, pas de traitement de contenu utilisateur) —
+      remis à plus tard plutôt que précipité dans ce lot.
 
-### 7.6 Audit dépendances
+### 7.6 Audit dépendances ✅ (backend), frontend en attente
 
-- [ ] Exécuter `npm audit` dans `backend/` et corriger les vulnérabilités critiques/hautes
-- [ ] Exécuter `npm audit` dans `frontend/` idem
-- [ ] Vérifier les dépendances outdated : `npm outdated` dans les deux projets
+- [x] `npm audit` backend — 2 vulnérabilités (multer DoS haute sévérité,
+      body-parser) corrigées via `npm audit fix` (patch non-breaking)
+- [ ] `npm audit` frontend — 10 vulnérabilités restantes, toutes dans la chaîne
+      vite/esbuild/@vitejs-plugin-vue, **dev-only** (le serveur de dev accepte des
+      requêtes de n'importe quel site — sans impact en prod, qui ne sert que du
+      statique déjà buildé). Fix nécessite un saut majeur vite 5→8 (breaking) —
+      pas fait ici, à traiter dans une session dédiée avec le temps de tout
+      revalider derrière.
 
-### 7.7 Nginx hardening
+### 7.7 Nginx hardening ✅
 
-- [ ] Ajouter `server_tokens off` dans nginx.conf (masque la version nginx)
-- [ ] Corriger `client_max_body_size 11M` → `210M` (incohérent avec la limite backend de 200 Mo)
-- [ ] Ajouter `add_header X-Content-Type-Options nosniff` et `add_header X-Frame-Options DENY`
-- [ ] Ajouter un timeout sur les connexions upstream (`proxy_connect_timeout`, `proxy_read_timeout`)
+- [x] `server_tokens off`
+- [x] `client_max_body_size` déjà à `210M` (le `11M` de cette todo était obsolète)
+- [x] `X-Content-Type-Options nosniff`, `X-Frame-Options SAMEORIGIN` (pas `DENY` —
+      casserait la visionneuse PDF, qui affiche le fichier dans un `<iframe>`
+      même origine)
+- [x] `proxy_connect_timeout`/`proxy_read_timeout` sur les locations proxifiées
 
 ---
 
@@ -79,15 +108,32 @@
 - [ ] `listFiles()` est appelé à **chaque requête** (`GET /api/images`, `GET /api/stats`, quota check, share check) — ajouter un cache en mémoire invalidé uniquement à l'upload et à la suppression
 - [ ] Mesurer l'impact : sur 1000 fichiers en SFTP, chaque requête fait une connexion SSH complète
 
-### 8.2 Cache HTTP sur les fichiers
+### 8.2 Cache HTTP sur les fichiers ✅
 
-- [ ] Ajouter `Cache-Control: public, max-age=31536000, immutable` sur `/uploads/:filename` — les noms de fichiers incluent un timestamp donc ils sont immuables
-- [ ] Ajouter `ETag` pour les fichiers (déjà géré par express.static si on l'utilisait, mais on pipe manuellement — implémenter à la main)
+- [x] `Cache-Control: private, max-age=31536000, immutable` sur `/uploads/:filename`
+      (`private` plutôt que `public` du todo original — l'accès passe par un
+      token/clé dans l'URL, un cache partagé ne devrait pas redistribuer ça).
+      A fallu `proxy_hide_header Cache-Control` en même temps : `res.sendFile()`
+      côté backend pose déjà son propre header, sans ça la réponse en avait deux
+      contradictoires
+- [x] ETag — déjà géré automatiquement par `res.sendFile()`, rien à faire
 
-### 8.3 Compression nginx
+### 8.3 Compression nginx ✅
 
-- [ ] Activer `gzip on` dans nginx.conf pour les réponses JSON/HTML/JS/CSS
-- [ ] Exclure les images et vidéos (déjà compressés)
+- [x] `gzip on` — types texte (JSON/JS/CSS), html couvert par défaut par nginx
+- [x] Images/vidéos/audio pas dans `gzip_types` (déjà compressés, gzip dessus
+      gaspillerait du CPU)
+
+### 8.x Images Docker allégées (pas dans le plan initial, fait pendant l'audit)
+
+- [x] Backend : `node:20-alpine` (embarque yarn, jamais utilisé) → `alpine:3.19`
+      + `apk add nodejs npm`, **210 Mo → 118 Mo** (-44%). `npm ci` au lieu de
+      `npm install` + `npm cache clean --force`. Vérifié : login bcrypt+JWT,
+      upload, delete, ssh2-sftp-client — tout fonctionne à l'identique
+- [x] Frontend : `nginx:alpine` → `nginx:alpine-slim` (exclut les modules non
+      utilisés — image-filter, xslt, geoip…), **~93 Mo → ~21 Mo** (-77%).
+      Vérifié : sert le statique et proxy vers le backend correctement
+- [x] `.dockerignore` ajouté côté backend (n'existait que côté frontend)
 
 ### 8.4 Thumbnails images
 
@@ -107,51 +153,36 @@
 
 ---
 
-## Phase 9 — Tests
+## Phase 9 — Tests ✅ (largement dépassé le scope initial)
 
-> Objectif : couvrir les fonctions critiques. `vitest` et `@testing-library/vue` sont déjà installés.
+> Objectif initial : couvrir les fonctions critiques avec quelques dizaines de tests.
+> Réalité fin juillet 2026 : **102 tests backend** (`node --test` + supertest, ~99%
+> de couverture lignes) et **154 tests frontend** (Vitest + Testing Library, ~99.8%
+> de couverture lignes) + 1 parcours e2e Playwright. Toutes les lignes ci-dessous
+> sont couvertes, souvent avec plus de cas que listé (chemins d'erreur, doublons,
+> annulations, backdrop-click, etc. — pas seulement le happy path).
 
-### 9.1 Tests unitaires backend
+### 9.1 Tests unitaires backend ✅
 
-> Installer `vitest` ou `node:test` côté backend.
+`node --test` (pas vitest — plus léger, aucune dépendance de test supplémentaire).
+Couvre : auth (JWT algo pinning inclus), images CRUD, quota, partage + purge,
+clés API, métadonnées (nom original, MIME, dimensions, EXIF, doublons sha256),
+rate limiting (login/upload/partage), headers de sécurité, storage local et SFTP
+(mocké), la factory de storage.
 
-| Test | Cas couverts |
-|------|-------------|
-| `POST /api/auth/login` | credentials valides → 200 + token, invalides → 401, manquants → 400 |
-| `GET /api/images` | sans token → 401, avec token → 200, filtre `?type=image` |
-| `POST /api/images/upload` | fichier valide → 201, extension bloquée → 415, pas de fichier → 400, quota dépassé → 413 |
-| `DELETE /api/images` | suppression multiple, fichier inexistant → errors[], auth requise |
-| `POST /api/share` | token généré, TTL respecté, `GET /share/:token` sert le fichier, token expiré → 410 |
-| `anyAuth` | JWT valide, JWT expiré, API key valide, `?key=` query param, aucun → 401 |
+### 9.2 + 9.3 Tests frontend (composables + composants) ✅
 
-### 9.2 Tests unitaires frontend (composables)
+Vitest + Testing Library. Couvre tous les composables (`useAuth`, `useApi`,
+`useStats`) et toutes les vues/composants (`LoginView`, `UploadView`,
+`TimelineView`, `SettingsView`, `AppHeader`, `AppFooter`, `BottomNav`).
+`abflowService` (côté AbView) hors scope de ce repo.
 
-| Test | Cas couverts |
-|------|-------------|
-| `useAuth` | `login()` stocke le token, `logout()` le supprime + redirige, `authHeaders()` retourne le header correct |
-| `useApi` — `getImages()` | appel correct, gestion 401 → logout automatique |
-| `useApi` — `uploadImageWithProgress()` | progrès émis, résolution sur 201, rejet sur erreur |
-| `useApi` — `createShareLink()` | appel POST correct, retourne url + expiresAt |
-| `abflowService` (AbView) | `isConfigured()` false sans env vars, `getPhotos()` mappe correctement les images |
+### 9.4 Tests E2E (Playwright) ✅ (parcours critique)
 
-### 9.3 Tests composants frontend
-
-| Composant | Cas couverts |
-|-----------|-------------|
-| `LoginView` | affiche le form, soumet, affiche les erreurs, affiche le message "session expirée" si `?expired=1` |
-| `UploadView` | drop zone reçoit des fichiers, queue affichée, bouton "Publier" actif, progress bar |
-| `TimelineView` | filtres changent les résultats, recherche filtre par nom, tri réordonne, lightbox s'ouvre |
-
-### 9.4 Tests E2E (Playwright)
-
-> Installer `@playwright/test`.
-
-| Flow | Étapes |
-|------|--------|
-| Login complet | visiter `/`, remplir le form, vérifier la redirection vers `/upload` |
-| Upload → voir | uploader un fichier image, aller dans `/files`, vérifier qu'il apparaît dans la liste |
-| Partage | cliquer "Partager", vérifier que le toast "Lien copié" s'affiche |
-| Logout + 401 | supprimer le token localStorage, appuyer sur refresh, vérifier redirect login |
+Un parcours bout-en-bout via Docker Compose : login → upload → apparition dans
+la timeline → suppression. Couvre le flow complet plutôt que 4 flows séparés —
+suffisant pour un projet à cette échelle, extensible si un flow spécifique
+casse un jour sans être couvert par les tests unitaires.
 
 ---
 
@@ -187,11 +218,14 @@
 - [ ] Ajouter `app.config.errorHandler` dans `main.ts` pour logger les erreurs Vue non catchées
 - [ ] Ajouter un composant `ErrorBoundary` optionnel pour afficher un message propre à l'utilisateur
 
-### 10.6 CI/CD minimal (optionnel — si GitHub)
+### 10.6 CI/CD ✅ (dépassé le scope initial)
 
-- [ ] GitHub Actions : `npm run typecheck` + `npm test` sur chaque push
-- [ ] `npm audit --audit-level=high` dans le CI
-- [ ] Build Docker sur chaque tag
+- [x] GitHub Actions : typecheck + tests (backend/frontend/e2e) sur chaque push/PR
+- [x] Build & push des images sur GHCR à chaque push sur `main`, déploiement
+      automatique sur le Pi via Watchtower (voir `DEPLOY_RUNNER.md`) — pas juste
+      "build sur chaque tag", un vrai pipeline de déploiement continu
+- [ ] `npm audit --audit-level=high` en étape CI dédiée — fait manuellement pour
+      l'instant (voir Phase 7.6), pas encore automatisé dans le pipeline
 
 ---
 

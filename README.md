@@ -17,7 +17,9 @@ Usage personnel — pas de multi-compte pour l'instant (voir [Roadmap](#roadmap)
   lecteur vidéo/audio, aperçu PDF
 - **Détection de doublons** à l'upload (empreinte sha256) — un fichier déjà
   présent est rejeté avant même d'être écrit sur le disque
-- **Métadonnées** : nom de fichier original, type MIME, dimensions d'image
+- **Métadonnées** : nom de fichier original, type MIME, dimensions d'image,
+  EXIF sur les photos (modèle d'appareil, date de prise de vue réelle utilisée
+  pour le groupement par jour — jamais le GPS, même si présent dans le fichier)
 - **Partage** : lien temporaire (24h par défaut) vers un fichier, sans donner
   accès au reste de l'espace
 - **Quota de stockage** configurable, avec barre d'usage visible dans l'app
@@ -25,6 +27,8 @@ Usage personnel — pas de multi-compte pour l'instant (voir [Roadmap](#roadmap)
   connecter une app externe en lecture seule, restreinte aux images
 - **PWA** installable (iOS/Android/desktop), thème sombre, mobile-first
 - **Stockage** local ou SFTP distant, au choix via `.env`
+- **Sécurité** : headers durcis (helmet, CSP, HSTS), JWT à algorithme figé,
+  rate limiting sur login/upload/partage, conteneurs non-root
 
 ## Stack
 
@@ -79,8 +83,8 @@ redéploie sans intervention manuelle. Voir `docker-compose.prod.yml`.
 ## Tests
 
 ```bash
-cd backend  && npm test              # 91 tests (node --test + supertest), ~99% de couverture
-cd frontend && npm test              # 143 tests unitaires (Vitest), ~99.8% de couverture (lignes)
+cd backend  && npm test              # 102 tests (node --test + supertest), ~99% de couverture
+cd frontend && npm test              # 154 tests unitaires (Vitest), ~99.8% de couverture (lignes)
 cd frontend && npm run test:coverage # rapport de couverture détaillé
 cd frontend && npm run typecheck
 make e2e                             # parcours critique de bout en bout (Playwright)

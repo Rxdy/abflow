@@ -28,6 +28,8 @@ function makeFile(overrides: Partial<FileEntry> = {}): FileEntry {
     mimeType: null,
     width: null,
     height: null,
+    cameraModel: null,
+    takenAt: null,
     ...overrides,
   }
 }
@@ -285,6 +287,48 @@ describe('TimelineView', () => {
 
     await fireEvent.click(document.querySelector('.file-cell')!)
     expect(document.querySelector('.lb-meta')!.textContent).toMatch(/1920×1080/)
+  })
+
+  it('shows the camera model in the lightbox when known', async () => {
+    const files = [makeFile({ filename: '1700000000000-a1-1.jpg', cameraModel: 'Canon EOS R5' })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    expect(document.querySelector('.lb-meta')!.textContent).toMatch(/Canon EOS R5/)
+  })
+
+  it('omits the camera model from the lightbox when unknown', async () => {
+    const files = [makeFile({
+      filename: '1700000000000-a1-1.jpg', size: 1024, width: null, height: null, cameraModel: null,
+    })]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    await fireEvent.click(document.querySelector('.file-cell')!)
+    const text = document.querySelector('.lb-meta')!.textContent!.trim()
+    expect(text.endsWith('·')).toBe(false)
+    expect(text).not.toContain('null')
+  })
+
+  it('groups photos by their real capture date (EXIF) rather than upload date', async () => {
+    const now = new Date()
+    const longAgo = new Date(now); longAgo.setDate(now.getDate() - 30)
+
+    const files = [
+      // Uploadé aujourd'hui, mais pris il y a 30 jours — doit apparaître sous
+      // la date de prise de vue, pas sous "Aujourd'hui".
+      makeFile({ filename: '1700000000000-a1-1.jpg', uploadedAt: now.getTime(), takenAt: longAgo.getTime() }),
+    ]
+    getImages.mockResolvedValue({ total: 1, limit: 50, offset: 0, images: files })
+    await mount()
+    await flushPromises()
+
+    expect(screen.queryByText("Aujourd'hui")).toBeNull()
+    const expected = longAgo.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    expect(screen.getByText(expected)).toBeTruthy()
   })
 
   it('omits dimensions from the lightbox when unknown', async () => {

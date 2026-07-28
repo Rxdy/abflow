@@ -43,3 +43,68 @@ describe('login rate limiting', () => {
     assert.ok(res.body.token)
   })
 })
+
+describe('upload rate limiting', () => {
+  let ctx, token
+
+  before(async () => {
+    ctx = await makeTestApp()
+    const login = await request(ctx.app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'testpass123' })
+    token = login.body.token
+  })
+  after(() => ctx.cleanup())
+
+  test('blocks the 21st upload within a minute from the same IP', async () => {
+    for (let i = 0; i < 20; i++) {
+      const res = await request(ctx.app)
+        .post('/api/images/upload')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Forwarded-For', '10.0.1.1')
+        .attach('file', Buffer.from(`content-${i}`), `f${i}.txt`)
+      assert.equal(res.status, 201)
+    }
+    const blocked = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Forwarded-For', '10.0.1.1')
+      .attach('file', Buffer.from('one-too-many'), 'blocked.txt')
+    assert.equal(blocked.status, 429)
+  })
+})
+
+describe('share-link rate limiting', () => {
+  let ctx, token, filename
+
+  before(async () => {
+    ctx = await makeTestApp()
+    const login = await request(ctx.app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'testpass123' })
+    token = login.body.token
+    const upload = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('shared content'), 'shared.txt')
+    filename = upload.body.filename
+  })
+  after(() => ctx.cleanup())
+
+  test('blocks the 31st share-link creation within a minute from the same IP', async () => {
+    for (let i = 0; i < 30; i++) {
+      const res = await request(ctx.app)
+        .post('/api/share')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Forwarded-For', '10.0.2.1')
+        .send({ filename })
+      assert.equal(res.status, 200)
+    }
+    const blocked = await request(ctx.app)
+      .post('/api/share')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Forwarded-For', '10.0.2.1')
+      .send({ filename })
+    assert.equal(blocked.status, 429)
+  })
+})

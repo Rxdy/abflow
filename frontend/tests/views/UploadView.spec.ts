@@ -66,7 +66,7 @@ describe('UploadView', () => {
       onProgress(100)
       return {
         filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 100, uploadedAt: 1, fileType: 'image',
-        displayName: null, originalName: null, mimeType: null, width: null, height: null,
+        displayName: null, originalName: null, mimeType: null, width: null, height: null, cameraModel: null, takenAt: null,
       }
     })
     render(UploadView)
@@ -138,7 +138,7 @@ describe('UploadView', () => {
 
     resolveUpload({
       filename: 'a.jpg', url: '/uploads/a.jpg', size: 100, uploadedAt: 1, fileType: 'image',
-      displayName: null, originalName: null, mimeType: null, width: null, height: null,
+      displayName: null, originalName: null, mimeType: null, width: null, height: null, cameraModel: null, takenAt: null,
     })
     await flushPromises()
   })

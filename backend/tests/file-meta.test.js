@@ -10,6 +10,13 @@ const PNG_1X1 = Buffer.from(
   'base64',
 )
 
+// JPEG 2x2 avec de vrais tags EXIF (Make/Model/DateTimeOriginal + GPS pour
+// vérifier que le GPS n'est justement jamais remonté) — généré avec piexif.
+const JPEG_WITH_EXIF = Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/4QDdRXhpZgAATU0AKgAAAAgABAEPAAIAAAAGAAAAPgEQAAIAAAANAAAARIdpAAQAAAABAAAAUYglAAQAAAABAAAAcwAAAABDYW5vbgBDYW5vbiBFT1MgUjUAAAGQAwACAAAAFAAAAF8yMDIzOjA1OjAxIDEyOjMwOjAwAAAEAAEAAgAAAAJOAAAAAAIABQAAAAMAAAClAAMAAgAAAAJFAAAAAAQABQAAAAMAAAC9AAAAMAAAAAEAAAAzAAAAAQAAAAAAAAABAAAAAgAAAAEAAAAVAAAAAQAAAAAAAAAB/9sAQwAIBgYHBgUIBwcHCQkICgwUDQwLCwwZEhMPFB0aHx4dGhwcICQuJyAiLCMcHCg3KSwwMTQ0NB8nOT04MjwuMzQy/9sAQwEJCQkMCwwYDQ0YMiEcITIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy/8AAEQgAAgACAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8AWiiivpDE/9k=',
+  'base64',
+)
+
 describe('upload metadata (original name, MIME, dimensions, checksum)', () => {
   let ctx, token
 
@@ -145,5 +152,84 @@ describe('duplicate detection at upload (sha256)', () => {
       .set('Authorization', `Bearer ${token}`)
       .attach('file', Buffer.from('bulk-content'), 'bulk-again.png')
     assert.equal(again.status, 201)
+  })
+})
+
+describe('EXIF extraction (camera model, capture date — never GPS)', () => {
+  let ctx, token
+
+  before(async () => {
+    ctx = await makeTestApp()
+    const login = await request(ctx.app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'testpass123' })
+    token = login.body.token
+  })
+  after(() => ctx.cleanup())
+
+  test('extracts cameraModel and takenAt from a real photo, and never returns GPS', async () => {
+    const res = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', JPEG_WITH_EXIF, { filename: 'photo.jpg', contentType: 'image/jpeg' })
+    assert.equal(res.status, 201)
+    assert.equal(res.body.cameraModel, 'Canon EOS R5')
+    // EXIF n'a pas de fuseau horaire — exifr interprète "2023:05:01 12:30:00"
+    // comme une heure locale à la machine qui parse, donc on relit takenAt
+    // avec les getters locaux plutôt que de figer un instant UTC (ce qui
+    // rendrait le test dépendant du fuseau du runner CI).
+    const takenAt = new Date(res.body.takenAt)
+    assert.equal(takenAt.getFullYear(), 2023)
+    assert.equal(takenAt.getMonth(), 4) // mai = index 4
+    assert.equal(takenAt.getDate(), 1)
+    assert.equal(takenAt.getHours(), 12)
+    assert.equal(takenAt.getMinutes(), 30)
+    assert.equal('gps' in res.body, false)
+    assert.equal('latitude' in res.body, false)
+    assert.equal('gpsLatitude' in res.body, false)
+    assert.equal(JSON.stringify(res.body).toLowerCase().includes('gps'), false)
+  })
+
+  test('GET /api/images and /api/images/:filename echo cameraModel/takenAt too', async () => {
+    // Un octet de plus à la fin (ignoré par les décodeurs JPEG) pour ne pas
+    // matcher le contenu de la photo uploadée dans le test précédent — sinon
+    // la détection de doublons (même describe/app) rejette l'upload en 409.
+    const jpeg = Buffer.concat([JPEG_WITH_EXIF, Buffer.from([0])])
+    const upload = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', jpeg, { filename: 'photo2.jpg', contentType: 'image/jpeg' })
+    const filename = upload.body.filename
+
+    const list = await request(ctx.app).get('/api/images').set('Authorization', `Bearer ${token}`)
+    const entry = list.body.images.find(f => f.filename === filename)
+    assert.equal(entry.cameraModel, 'Canon EOS R5')
+    assert.ok(entry.takenAt)
+
+    const single = await request(ctx.app)
+      .get(`/api/images/${filename}`)
+      .set('Authorization', `Bearer ${token}`)
+    assert.equal(single.body.cameraModel, 'Canon EOS R5')
+  })
+
+  test('cameraModel/takenAt stay null for a photo without EXIF', async () => {
+    // PNG_1X1 n'a pas de segment EXIF du tout.
+    const res = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', PNG_1X1, { filename: 'no-exif.png', contentType: 'image/png' })
+    assert.equal(res.status, 201)
+    assert.equal(res.body.cameraModel, null)
+    assert.equal(res.body.takenAt, null)
+  })
+
+  test('does not attempt EXIF extraction on non-image files', async () => {
+    const res = await request(ctx.app)
+      .post('/api/images/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('not an image'), 'notes.txt')
+    assert.equal(res.status, 201)
+    assert.equal(res.body.cameraModel, null)
+    assert.equal(res.body.takenAt, null)
   })
 })
