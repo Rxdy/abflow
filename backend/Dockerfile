@@ -22,7 +22,10 @@ RUN apk add --no-cache nodejs && \
     adduser -D -u 1000 -G app app
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
-COPY server.js app.js ./
+# package.json doit rester dans l'image finale, pas juste dans le stage de
+# build : c'est lui qui porte "type": "module", sans quoi node interprète les
+# `import` de app.js/server.js comme du CommonJS et plante au démarrage.
+COPY package.json server.js app.js ./
 COPY storage/ ./storage/
 # uid 1000 — même utilisateur que celui qui possède ~/abflow/uploads sur le Pi
 # (bind mount), donc les écritures marchent sans avoir à toucher aux permissions
