@@ -1,4 +1,5 @@
 import express from 'express'
+import helmet from 'helmet'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import cors from 'cors'
@@ -8,6 +9,7 @@ import fs from 'fs/promises'
 import { createReadStream } from 'fs'
 import { randomUUID, randomBytes, createHash } from 'crypto'
 import { imageSize } from 'image-size'
+import exifr from 'exifr'
 import { createStorage } from './storage/index.js'
 
 // ── File type helpers ────────────────────────────────────────────────────────
@@ -36,6 +38,25 @@ function hashFile(filePath) {
   })
 }
 
+// Modèle d'appareil + date de prise de vue réelle, jamais la position GPS —
+// `pick` ne fait lire à exifr que les blocs nécessaires aux tags demandés,
+// donc le bloc GPS n'est même jamais parsé (pas juste filtré après coup).
+async function readExif(filePath) {
+  try {
+    const tags = await exifr.parse(filePath, { pick: ['Make', 'Model', 'DateTimeOriginal'] })
+    if (!tags) return { cameraModel: null, takenAt: null }
+    const make = typeof tags.Make === 'string' ? tags.Make.trim() : ''
+    const model = typeof tags.Model === 'string' ? tags.Model.trim() : ''
+    const cameraModel = model && !model.toLowerCase().startsWith(make.toLowerCase())
+      ? [make, model].filter(Boolean).join(' ')
+      : (model || make || null)
+    const takenAt = tags.DateTimeOriginal instanceof Date ? tags.DateTimeOriginal.getTime() : null
+    return { cameraModel: cameraModel || null, takenAt }
+  } catch {
+    return { cameraModel: null, takenAt: null } // pas d'EXIF ou format non supporté — pas bloquant
+  }
+}
+
 const SHARE_DEFAULT_TTL = 24 * 60 * 60 * 1000 // 24h
 const BLOCKED_MIME = /^(application\/(x-msdownload|x-sh|x-bat|x-msdos-program|x-executable|java-archive)|text\/x-shellscript)$/i
 const BLOCKED_EXT  = /\.(exe|sh|bat|cmd|com|msi|dll|vbs|ps1|php|php3|php5|phtml|jsp|jspx|asp|aspx|cgi|pl|py|rb|jar|war|ear|class)$/i
@@ -52,6 +73,9 @@ export async function createApp() {
   if (!JWT_SECRET || !AUTH_USER || !AUTH_PASS) {
     console.error('[ERROR] Missing JWT_SECRET / AUTH_USERNAME / AUTH_PASSWORD')
     process.exit(1)
+  }
+  if (JWT_SECRET.length < 32) {
+    console.warn('[WARN] JWT_SECRET fait moins de 32 caractères — génère-en un plus long avec: openssl rand -hex 32')
   }
 
   // Hash le mot de passe une fois au démarrage — évite de stocker un hash bcrypt
@@ -114,12 +138,12 @@ export async function createApp() {
     return null
   }
 
-  // ── Métadonnées d'upload (nom original, MIME, dimensions, empreinte sha256) ──
+  // ── Métadonnées d'upload (nom original, MIME, dimensions, EXIF, empreinte sha256) ──
   // Le sha256 sert à détecter les doublons de contenu à l'upload — les fichiers
   // uploadés avant l'ajout de cette fonctionnalité n'ont pas d'entrée ici, les
   // champs correspondants restent simplement à null pour eux.
   const META_FILE = '.file-meta.json'
-  let fileMeta = new Map() // filename → { originalName, mimeType, sha256, width, height }
+  let fileMeta = new Map() // filename → { originalName, mimeType, sha256, width, height, cameraModel, takenAt }
   try {
     const raw = await Promise.resolve(storage.readTextFile(META_FILE))
     if (raw) fileMeta = new Map(Object.entries(JSON.parse(raw)))
@@ -149,6 +173,8 @@ export async function createApp() {
         mimeType: meta.mimeType ?? null,
         width: meta.width ?? null,
         height: meta.height ?? null,
+        cameraModel: meta.cameraModel ?? null,
+        takenAt: meta.takenAt ?? null,
       }
     })
   }
@@ -162,15 +188,33 @@ export async function createApp() {
       if (entry.expiresAt < now) shareTokens.delete(token)
     }
   }
+  // Avant ce ticker, la purge ne se déclenchait qu'à la création/consultation
+  // d'un lien — sans trafic de partage, les tokens expirés restaient en mémoire
+  // indéfiniment (fuite lente). `unref()` pour ne pas empêcher le process de
+  // s'arrêter proprement (utile notamment dans les tests).
+  setInterval(pruneExpired, 60 * 60 * 1000).unref()
 
   // ── App ─────────────────────────────────────────────────────────────────────
   const app = express()
   // Un seul hop de proxy en prod (Traefik) — nécessaire pour que
   // express-rate-limit et req.ip lisent le bon client derrière X-Forwarded-For.
   app.set('trust proxy', 1)
+  app.use(helmet({
+    // Par défaut helmet met Cross-Origin-Resource-Policy à "same-origin", ce
+    // qui bloquerait précisément l'usage que les clés API sont censées
+    // permettre : une app externe (AbView) qui charge des images depuis
+    // AbFlow en cross-origin (<img src="https://abflow.../uploads/x.jpg?key=...">).
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }))
+  app.use((_req, res, next) => {
+    // Pas couvert par défaut dans helmet 8 — désactive l'accès caméra/micro/
+    // géoloc pour toute page qui embarquerait ce backend (defense in depth).
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    next()
+  })
   app.use(cors(corsOptions))
   app.options('*', cors(corsOptions))
-  app.use(express.json())
+  app.use(express.json({ limit: '1mb' }))
 
   // ── Rate limiting ───────────────────────────────────────────────────────────
   const loginLimiter = rateLimit({
@@ -180,12 +224,29 @@ export async function createApp() {
     legacyHeaders: false,
     message: { error: 'Too many login attempts, please try again later.' },
   })
+  const uploadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Trop d\'uploads, réessaie dans une minute.' },
+  })
+  const shareLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Trop de liens de partage créés, réessaie dans une minute.' },
+  })
 
   // ── Auth middlewares ─────────────────────────────────────────────────────────
   function jwtAuth(req, res, next) {
     const h = req.headers.authorization
     if (!h?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
-    try { req.user = jwt.verify(h.slice(7), JWT_SECRET); next() }
+    // Sans `algorithms`, jwt.verify accepte l'algorithme déclaré dans le token
+    // lui-même — un attaquant qui forge un token avec alg:"none" (ou un autre
+    // algo faible) pourrait le faire accepter. On force HS256, le seul utilisé.
+    try { req.user = jwt.verify(h.slice(7), JWT_SECRET, { algorithms: ['HS256'] }); next() }
     catch { res.status(401).json({ error: 'Invalid or expired token' }) }
   }
 
@@ -218,7 +279,7 @@ export async function createApp() {
     const validPass = await bcrypt.compare(password, AUTH_HASH)
     if (!validUser || !validPass)
       return res.status(401).json({ error: 'Invalid credentials' })
-    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '24h' })
+    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '24h', algorithm: 'HS256' })
     res.json({ token })
   })
 
@@ -249,6 +310,8 @@ export async function createApp() {
       mimeType: meta.mimeType ?? null,
       width: meta.width ?? null,
       height: meta.height ?? null,
+      cameraModel: meta.cameraModel ?? null,
+      takenAt: meta.takenAt ?? null,
     })
   })
 
@@ -345,7 +408,7 @@ export async function createApp() {
   })
 
   // ── Upload ───────────────────────────────────────────────────────────────────
-  app.post('/api/images/upload', jwtAuth, upload.single('file'), async (req, res) => {
+  app.post('/api/images/upload', jwtAuth, uploadLimiter, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
     if (BLOCKED_EXT.test(req.file.originalname) || BLOCKED_MIME.test(req.file.mimetype)) {
       // multer a déjà écrit le fichier sur le disque local (y compris pour le backend
@@ -375,18 +438,22 @@ export async function createApp() {
     }
 
     const fileType = getFileType(req.file.originalname)
-    let width = null, height = null
+    let width = null, height = null, cameraModel = null, takenAt = null
     if (fileType === 'image') {
       try {
         const dim = imageSize(await fs.readFile(req.file.path))
         width = dim.width
         height = dim.height
       } catch { /* format non supporté par image-size — pas bloquant */ }
+      ;({ cameraModel, takenAt } = await readExif(req.file.path))
     }
 
     try {
       const { filename, size, uploadedAt } = await storage.saveUploadedFile(req)
-      fileMeta.set(filename, { originalName: req.file.originalname, mimeType: req.file.mimetype, sha256, width, height })
+      fileMeta.set(filename, {
+        originalName: req.file.originalname, mimeType: req.file.mimetype, sha256,
+        width, height, cameraModel, takenAt,
+      })
       await saveFileMeta()
       res.status(201).json({
         filename,
@@ -399,6 +466,8 @@ export async function createApp() {
         mimeType: req.file.mimetype,
         width,
         height,
+        cameraModel,
+        takenAt,
       })
     } catch (err) {
       res.status(500).json({ error: err.message })
@@ -406,7 +475,7 @@ export async function createApp() {
   })
 
   // ── Share ────────────────────────────────────────────────────────────────────
-  app.post('/api/share', jwtAuth, async (req, res) => {
+  app.post('/api/share', jwtAuth, shareLimiter, async (req, res) => {
     const filename = path.basename(req.body?.filename ?? '')
     if (!filename) return res.status(400).json({ error: 'filename required' })
     const exists = await Promise.resolve(storage.exists(filename))
@@ -432,6 +501,7 @@ export async function createApp() {
   app.use((err, _req, res, _next) => {
     if (err.message?.startsWith('CORS')) return res.status(403).json({ error: err.message })
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 200 MB)' })
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Requête trop volumineuse' })
     res.status(400).json({ error: err.message })
   })
 

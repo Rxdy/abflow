@@ -11,6 +11,8 @@ export interface FileEntry {
   mimeType: string | null
   width: number | null
   height: number | null
+  cameraModel: string | null
+  takenAt: number | null
 }
 
 export interface ImagesResponse {

@@ -195,7 +195,7 @@
         </button>
         <div class="lb-info">
           <span class="lb-meta">
-            {{ formatDateTime(lightbox.uploadedAt) }} · {{ formatSize(lightbox.size) }}<template v-if="lightbox.width && lightbox.height"> · {{ lightbox.width }}×{{ lightbox.height }}</template>
+            {{ formatDateTime(effectiveDate(lightbox)) }} · {{ formatSize(lightbox.size) }}<template v-if="lightbox.width && lightbox.height"> · {{ lightbox.width }}×{{ lightbox.height }}</template><template v-if="lightbox.cameraModel"> · {{ lightbox.cameraModel }}</template>
           </span>
           <div class="lb-actions">
           <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ imageFiles.length }}</span>
@@ -393,14 +393,22 @@ const filteredFiles = computed(() => {
   return sorted
 })
 
+// Date de prise de vue réelle si on l'a (EXIF), sinon date d'upload — sans ça,
+// un lot de vieilles photos importées d'un coup se retrouve toutes groupées
+// sous "Aujourd'hui" au lieu de leur vraie date.
+function effectiveDate(f: FileEntry): number {
+  return f.takenAt ?? f.uploadedAt
+}
+
 const groups = computed((): DayGroup[] => {
   if (sortKey.value !== 'date') {
     return [{ label: '', files: filteredFiles.value }]
   }
   const map = new Map<string, DayGroup>()
   for (const f of filteredFiles.value) {
-    const key = dayKey(f.uploadedAt)
-    if (!map.has(key)) map.set(key, { label: dayLabel(f.uploadedAt), files: [] })
+    const date = effectiveDate(f)
+    const key = dayKey(date)
+    if (!map.has(key)) map.set(key, { label: dayLabel(date), files: [] })
     map.get(key)!.files.push(f)
   }
   return [...map.values()]
