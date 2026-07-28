@@ -48,7 +48,10 @@ funnel:
 e2e:
 	@touch .env
 	@mkdir -p /tmp/abflow-e2e-uploads
-	@docker run --rm -v /tmp/abflow-e2e-uploads:/data alpine sh -c 'rm -rf /data/*'
+	# chown vers 1000:1000 — même uid que l'utilisateur non-root "app" du conteneur
+	# backend (voir backend/Dockerfile) ; sans ça le dossier appartient à
+	# l'utilisateur qui a lancé `make e2e` et l'upload échoue en EACCES silencieux.
+	@docker run --rm -v /tmp/abflow-e2e-uploads:/data alpine sh -c 'rm -rf /data/* && chown -R 1000:1000 /data'
 	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 	@status=0; \
 	(cd frontend && E2E_BASE_URL=http://localhost:8099 npx playwright test) || status=$$?; \
