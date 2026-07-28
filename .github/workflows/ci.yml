@@ -80,17 +80,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Le frontend build (npm install + vue-tsc + vite build) tourne maintenant
-      # nativement sur le runner amd64 grâce à --platform=$BUILDPLATFORM dans
-      # frontend/Dockerfile — sans ça, buildx exécutait tout ce travail CPU sous
-      # émulation QEMU arm64, ce qui faisait passer le job de ~1 min à 13+ min
-      # (les artefacts produits — HTML/CSS/JS statiques — sont indépendants de
-      # l'architecture, donc rien n'empêchait de les construire nativement).
-      # Le backend garde un Dockerfile single-stage classique (donc toujours
-      # sous QEMU) : ses dépendances sont assez légères pour que ça reste rapide
-      # (~30-40s), et certaines (ssh2 notamment) ont des modules natifs optionnels
-      # qu'il vaut mieux compiler pour la bonne architecture dès l'install plutôt
-      # que de risquer un mismatch amd64/arm64 avec le même trick multi-stage.
+      # Le build npm (frontend : npm install + vue-tsc + vite build ; backend :
+      # npm ci) tourne nativement sur le runner amd64 grâce à
+      # --platform=$BUILDPLATFORM dans les deux Dockerfile — sans ça, buildx
+      # exécutait ce travail sous émulation QEMU arm64. Pour le frontend
+      # c'était juste lent (~1 min → 13+ min pour des artefacts HTML/CSS/JS
+      # indépendants de l'architecture). Pour le backend c'était pire : npm ci
+      # plantait de façon non-déterministe sous QEMU (exit 132, SIGILL) — voir
+      # le commentaire dans backend/Dockerfile. Aucun risque de mismatch
+      # d'architecture : aucune dépendance ne compile de binaire natif ici
+      # (l'addon optionnel de ssh2 retombe sur son fallback JS, vérifié).
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 

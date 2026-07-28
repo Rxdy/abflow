@@ -130,6 +130,17 @@
       + `apk add nodejs npm`, **210 Mo → 118 Mo** (-44%). `npm ci` au lieu de
       `npm install` + `npm cache clean --force`. Vérifié : login bcrypt+JWT,
       upload, delete, ssh2-sftp-client — tout fonctionne à l'identique
+    - [x] **Suite immédiate, en CI** : le build multi-arch (`linux/arm64` sous
+      QEMU sur le runner amd64) plantait de façon non-déterministe pendant
+      `npm ci` (exit 132 = SIGILL). Passage en Dockerfile multi-stage avec
+      `--platform=$BUILDPLATFORM` sur le stage d'install (même trick que le
+      frontend, cf. 8.x frontend ci-dessous) : `npm ci` tourne nativement sur
+      le runner, seul `node_modules` est copié dans le stage final arm64.
+      Aucun risque d'archi puisqu'aucune dépendance ne compile de binaire
+      natif ici (l'addon optionnel `cpu-features` de `ssh2` retombe sur son
+      fallback JS, faute de toolchain — vérifié, zéro fichier `.node` dans
+      `node_modules`). Bonus : `npm` lui-même n'est plus nécessaire à
+      l'exécution, retiré du stage final (~118 Mo → ~102 Mo)
 - [x] Frontend : `nginx:alpine` → `nginx:alpine-slim` (exclut les modules non
       utilisés — image-filter, xslt, geoip…), **~93 Mo → ~21 Mo** (-77%).
       Vérifié : sert le statique et proxy vers le backend correctement
