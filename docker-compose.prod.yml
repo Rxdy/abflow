@@ -3,6 +3,7 @@ services:
     image: ghcr.io/rxdy/abflow-backend:latest
     container_name: abflow-backend-prod
     restart: unless-stopped
+    mem_limit: 192m
     env_file:
       - .env
     environment:
@@ -18,6 +19,7 @@ services:
     image: ghcr.io/rxdy/abflow-frontend:latest
     container_name: abflow-frontend-prod
     restart: unless-stopped
+    mem_limit: 64m
     depends_on:
       - backend
     labels:
