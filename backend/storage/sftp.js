@@ -102,6 +102,10 @@ export class SFTPStorage {
     stream.pipe(res)
   }
 
+  async readFile(filename) {
+    return this._withClient(c => c.get(`${this.remotePath}/${filename}`))
+  }
+
   async readTextFile(name) {
     const remote = `${this.remotePath}/${name}`
     const exists = await this._withClient(c => c.exists(remote))
