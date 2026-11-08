@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs/promises'
 import { createReadStream } from 'fs'
-import { randomUUID, randomBytes, createHash } from 'crypto'
+import { randomUUID, randomBytes, createHash, createHmac } from 'crypto'
 import { imageSize } from 'image-size'
 import exifr from 'exifr'
 import { createStorage } from './storage/index.js'
@@ -217,6 +217,13 @@ export async function createApp() {
   app.use(express.json({ limit: '1mb' }))
 
   // ── Rate limiting ───────────────────────────────────────────────────────────
+  const refreshLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+  })
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -239,6 +246,41 @@ export async function createApp() {
     message: { error: 'Trop de liens de partage créés, réessaie dans une minute.' },
   })
 
+  // ── Session persistante (cookie) ────────────────────────────────────────────
+  // Le jeton d'accès dure 24 h. Pour que les utilisateurs n'aient pas à retaper leur mot de passe, la connexion
+  // dépose aussi un cookie de session, très long (un an par défaut, renouvelé à chaque usage : tant qu'on se
+  // sert d'abflow il ne s'arrête jamais). Il est httpOnly (illisible par le JavaScript de la page), SameSite=Strict
+  // et n'est envoyé qu'aux routes /api/auth : il ne sert qu'à renouveler le jeton d'accès, jamais à accéder aux
+  // fichiers. Changer AUTH_PASSWORD ou JWT_SECRET déconnecte tout le monde ; « Déconnexion » l'efface.
+  const SESSION_COOKIE = 'abflow_session'
+  const SESSION_PATH = '/api/auth'
+  // Les navigateurs plafonnent un cookie à 400 jours.
+  const SESSION_DAYS = Math.min(Math.max(parseInt(process.env.SESSION_DAYS, 10) || 365, 1), 400)
+  const SESSION_VERSION = createHmac('sha256', JWT_SECRET).update(AUTH_PASS).digest('hex').slice(0, 16)
+
+  function readCookie(req, name) {
+    for (const part of (req.headers.cookie ?? '').split(';')) {
+      const i = part.indexOf('=')
+      if (i > 0 && part.slice(0, i).trim() === name) {
+        try { return decodeURIComponent(part.slice(i + 1).trim()) } catch { return null }
+      }
+    }
+    return null
+  }
+
+  function cookieOptions(req) {
+    // Secure : derrière Traefik la requête arrive en https (trust proxy) ; COOKIE_SECURE=false pour un essai en http.
+    const secure = process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : req.secure
+    return { httpOnly: true, sameSite: 'strict', secure, path: SESSION_PATH }
+  }
+
+  function setSessionCookie(req, res, username) {
+    const value = jwt.sign({ username, typ: 'session', pv: SESSION_VERSION }, JWT_SECRET, {
+      expiresIn: `${SESSION_DAYS}d`, algorithm: 'HS256',
+    })
+    res.cookie(SESSION_COOKIE, value, { ...cookieOptions(req), maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 })
+  }
+
   // ── Auth middlewares ─────────────────────────────────────────────────────────
   function jwtAuth(req, res, next) {
     const h = req.headers.authorization
@@ -246,7 +288,13 @@ export async function createApp() {
     // Sans `algorithms`, jwt.verify accepte l'algorithme déclaré dans le token
     // lui-même — un attaquant qui forge un token avec alg:"none" (ou un autre
     // algo faible) pourrait le faire accepter. On force HS256, le seul utilisé.
-    try { req.user = jwt.verify(h.slice(7), JWT_SECRET, { algorithms: ['HS256'] }); next() }
+    // Le jeton de session (cookie, très longue durée) ne sert qu'à en obtenir un nouveau : jamais accepté ici.
+    try {
+      const user = jwt.verify(h.slice(7), JWT_SECRET, { algorithms: ['HS256'] })
+      if (user.typ === 'session') throw new Error('session token')
+      req.user = user
+      next()
+    }
     catch { res.status(401).json({ error: 'Invalid or expired token' }) }
   }
 
@@ -280,7 +328,29 @@ export async function createApp() {
     if (!validUser || !validPass)
       return res.status(401).json({ error: 'Invalid credentials' })
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '24h', algorithm: 'HS256' })
+    setSessionCookie(req, res, username)
     res.json({ token })
+  })
+
+  // Renouvelle le jeton d'accès à partir du cookie de session (et prolonge le cookie). Sans cookie valide : 401.
+  app.post('/api/auth/refresh', refreshLimiter, (req, res) => {
+    try {
+      const session = jwt.verify(readCookie(req, SESSION_COOKIE) ?? '', JWT_SECRET, { algorithms: ['HS256'] })
+      if (session.typ !== 'session' || session.pv !== SESSION_VERSION || session.username !== AUTH_USER) {
+        throw new Error('session invalide')
+      }
+      setSessionCookie(req, res, session.username)
+      res.json({ token: jwt.sign({ username: session.username }, JWT_SECRET, { expiresIn: '24h', algorithm: 'HS256' }) })
+    } catch {
+      res.clearCookie(SESSION_COOKIE, cookieOptions(req))
+      res.status(401).json({ error: 'No valid session' })
+    }
+  })
+
+  // Déconnexion : efface le cookie de session.
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie(SESSION_COOKIE, cookieOptions(req))
+    res.status(204).end()
   })
 
   // ── Images ───────────────────────────────────────────────────────────────────

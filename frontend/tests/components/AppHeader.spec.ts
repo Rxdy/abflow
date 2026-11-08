@@ -1,3 +1,4 @@
+import { jeton } from '../helpers/jeton'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/vue'
 import { flushPromises } from '@vue/test-utils'
@@ -24,7 +25,7 @@ async function mount() {
 beforeEach(() => {
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
-  localStorage.setItem('auth_token', 'tok_test')
+  localStorage.setItem('auth_token', jeton('test'))
 })
 
 afterEach(() => {
@@ -85,7 +86,7 @@ describe('AppHeader settings link', () => {
   afterEach(() => { setupWithRouter(() => useAuth()).result.token.value = null })
 
   it('links to /settings', async () => {
-    setupWithRouter(() => useAuth()).result.token.value = 'tok_test'
+    setupWithRouter(() => useAuth()).result.token.value = jeton('test')
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ count: 0, totalSize: 0, byType: {}, quotaBytes: null }),
@@ -96,7 +97,7 @@ describe('AppHeader settings link', () => {
 
   it('logs out when the logout button is clicked', async () => {
     const { result: auth } = setupWithRouter(() => useAuth())
-    auth.token.value = 'tok_test'
+    auth.token.value = jeton('test')
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ count: 0, totalSize: 0, byType: {}, quotaBytes: null }),

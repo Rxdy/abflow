@@ -33,3 +33,23 @@ test('login -> upload -> apparaît dans la timeline -> suppression', async ({ pa
 
   await expect(page.getByText('Aucun fichier.')).toBeVisible()
 })
+
+test('connexion persistante : le cookie rouvre la session, la déconnexion la ferme', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Identifiant').fill(USERNAME)
+  await page.getByLabel('Mot de passe').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Se connecter' }).click()
+  await expect(page).toHaveURL(/\/files$/)
+
+  // Le jeton d'accès (24 h) du navigateur a disparu ou expiré : le cookie de session en redonne un,
+  // sans repasser par la page de connexion.
+  await page.evaluate(() => localStorage.removeItem('auth_token'))
+  await page.goto('/files')
+  await expect(page).toHaveURL(/\/files$/)
+
+  // « Déconnexion » efface le cookie : la session ne se rouvre plus toute seule.
+  await page.getByTitle('Déconnexion').click()
+  await expect(page).toHaveURL(/\/$|\/login/)
+  await page.goto('/files')
+  await expect(page).not.toHaveURL(/\/files$/)
+})
