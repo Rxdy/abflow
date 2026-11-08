@@ -505,5 +505,22 @@ export async function createApp() {
     res.status(400).json({ error: err.message })
   })
 
+  // Les images envoyées avant l'ajout des métadonnées n'ont pas de dimensions : on les lit une fois au démarrage
+  // et on les garde, pour que les intégrations (AbView) connaissent l'orientation de chaque photo.
+  async function rattraperDimensions() {
+    let change = false
+    for (const f of await listFiles()) {
+      if (f.fileType !== 'image' || (f.width && f.height)) continue
+      try {
+        const dim = imageSize(await Promise.resolve(storage.readFile(f.filename)))
+        if (!dim.width || !dim.height) continue
+        fileMeta.set(f.filename, { ...(fileMeta.get(f.filename) ?? {}), width: dim.width, height: dim.height })
+        change = true
+      } catch { /* format non supporté ou fichier illisible — on réessaiera au prochain démarrage */ }
+    }
+    if (change) await saveFileMeta()
+  }
+  await rattraperDimensions()
+
   return app
 }
