@@ -1,4 +1,4 @@
-import { useAuth } from './useAuth'
+import { useAuth, ensureFreshToken, refreshSession } from './useAuth'
 import type { ApiKey, ApiKeyCreated, FileEntry, ImagesResponse, Stats } from '../types'
 
 export function useApi() {
@@ -16,15 +16,21 @@ export function useApi() {
     url: string,
     body: unknown = null,
   ): Promise<Response | null> {
-    const headers: Record<string, string> = { ...authHeaders() }
-    const opts: RequestInit = { method, headers }
-    if (body && !(body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json'
-      opts.body = JSON.stringify(body)
-    } else if (body instanceof FormData) {
-      opts.body = body
+    const envoyer = (): Promise<Response> => {
+      const headers: Record<string, string> = { ...authHeaders() }
+      const opts: RequestInit = { method, headers }
+      if (body && !(body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json'
+        opts.body = JSON.stringify(body)
+      } else if (body instanceof FormData) {
+        opts.body = body
+      }
+      return fetch(url, opts)
     }
-    const res = await fetch(url, opts)
+    await ensureFreshToken()
+    let res = await envoyer()
+    // Jeton refusé : une fois, on le renouvelle avec le cookie de session avant de renvoyer vers la connexion.
+    if (res.status === 401 && (await refreshSession())) res = await envoyer()
     if (res.status === 401) { logout(true); return null }
     return res
   }
@@ -56,7 +62,7 @@ export function useApi() {
     file: File,
     onProgress: (pct: number) => void,
   ): Promise<FileEntry> {
-    return new Promise((resolve, reject) => {
+    return ensureFreshToken().then(() => new Promise<FileEntry>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       const fd = new FormData()
       fd.append('file', file)
@@ -83,7 +89,7 @@ export function useApi() {
       xhr.open('POST', '/api/images/upload')
       for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v)
       xhr.send(fd)
-    })
+    }))
   }
 
   async function renameFile(filename: string, displayName: string): Promise<{ displayName: string | null }> {

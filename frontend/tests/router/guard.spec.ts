@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { jeton } from '../helpers/jeton'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import router from '../../src/router'
 
 // Chaque navigation utilise une query unique — pousser deux fois vers exactement
@@ -22,13 +23,13 @@ describe('router navigation guard', () => {
   })
 
   it('allows a protected route when a token is present', async () => {
-    localStorage.setItem('auth_token', 'tok_present')
+    localStorage.setItem('auth_token', jeton('present'))
     await router.push(unique('/files'))
     expect(router.currentRoute.value.name).toBe('files')
   })
 
   it('redirects an already-logged-in user away from /login to /upload', async () => {
-    localStorage.setItem('auth_token', 'tok_present')
+    localStorage.setItem('auth_token', jeton('present'))
     await router.push(unique('/'))
     expect(router.currentRoute.value.name).toBe('upload')
   })
@@ -41,5 +42,30 @@ describe('router navigation guard', () => {
   it('redirects unknown paths to /login', async () => {
     await router.push(unique('/does/not/exist'))
     expect(router.currentRoute.value.name).toBe('login')
+  })
+})
+
+describe('router navigation guard : session persistante', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('un jeton expiré est renouvelé par le cookie de session : on ne repasse pas par la connexion', async () => {
+    localStorage.setItem('auth_token', jeton('vieux', -60))
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ token: jeton('neuf') }) })
+    vi.stubGlobal('fetch', fetchMock)
+    await router.push(unique('/files'))
+    expect(router.currentRoute.value.name).toBe('files')
+    expect(localStorage.getItem('auth_token')).toBe(jeton('neuf'))
+    vi.unstubAllGlobals()
+  })
+
+  it('jeton expiré et pas de session : retour à la connexion, jeton périmé retiré', async () => {
+    localStorage.setItem('auth_token', jeton('vieux', -60))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }))
+    await router.push(unique('/files'))
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(localStorage.getItem('auth_token')).toBeNull()
+    vi.unstubAllGlobals()
   })
 })

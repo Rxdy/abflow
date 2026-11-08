@@ -1,3 +1,4 @@
+import { jeton } from '../helpers/jeton'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { useAuth } from '../../src/composables/useAuth'
@@ -31,7 +32,8 @@ describe('useApi', () => {
   it('getImages requests the right URL with auth headers and returns parsed JSON', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_1' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('1') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -44,14 +46,15 @@ describe('useApi', () => {
 
     const [url, opts] = fetchMock.mock.calls[1]
     expect(url).toBe('/api/images?limit=50&offset=0&type=image')
-    expect(opts.headers.Authorization).toBe('Bearer tok_1')
+    expect(opts.headers.Authorization).toBe(`Bearer ${jeton('1')}`)
     expect(result).toEqual({ total: 0, limit: 50, offset: 0, images: [] })
   })
 
   it('getImages omits the type param when passed "all"', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_1b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('1b') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -67,7 +70,8 @@ describe('useApi', () => {
   it('getImages throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_1c' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('1c') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500 })
@@ -76,7 +80,7 @@ describe('useApi', () => {
 
   it('logs out and returns null when a request gets a 401', async () => {
     const { auth, api, router } = setup()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_2' }) })
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('2') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401 })
@@ -91,7 +95,8 @@ describe('useApi', () => {
   it('uploadImage throws the server error message on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('3') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -106,7 +111,8 @@ describe('useApi', () => {
   it('uploadImage falls back to a generic message when the server sends none', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3e' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('3e') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
@@ -116,7 +122,8 @@ describe('useApi', () => {
   it('uploadImage resolves with the created file on success', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('3b') }) })
     await auth.login('admin', 'secret')
 
     const created = { filename: 'gen.jpg', url: '/uploads/gen.jpg', size: 10, uploadedAt: 1, fileType: 'image' }
@@ -128,7 +135,8 @@ describe('useApi', () => {
   it('renameFile patches the display name and returns it', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3c' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('3c') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Vacances' }) })
@@ -144,7 +152,8 @@ describe('useApi', () => {
   it('renameFile throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_3d' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('3d') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
@@ -153,23 +162,25 @@ describe('useApi', () => {
 
   it('mediaUrl appends the token as a query param so <img>/<video> tags can authenticate', async () => {
     const { auth, api } = setup()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_media' }) })
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('media') }) })
     await auth.login('admin', 'secret')
 
-    expect(api.mediaUrl('/uploads/photo.jpg')).toBe('/uploads/photo.jpg?token=tok_media')
-    expect(api.mediaUrl('/uploads/photo.jpg?key=abf_x')).toBe('/uploads/photo.jpg?key=abf_x&token=tok_media')
+    expect(api.mediaUrl('/uploads/photo.jpg')).toBe(`/uploads/photo.jpg?token=${jeton('media')}`)
+    expect(api.mediaUrl('/uploads/photo.jpg?key=abf_x')).toBe(`/uploads/photo.jpg?key=abf_x&token=${jeton('media')}`)
   })
 
   it('mediaUrl returns the URL unchanged when logged out', async () => {
     const { auth, api } = setup()
     auth.logout()
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
     expect(api.mediaUrl('/uploads/photo.jpg')).toBe('/uploads/photo.jpg')
   })
 
   it('getStats returns the parsed stats including quotaBytes', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_4' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('4') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -184,7 +195,8 @@ describe('useApi', () => {
   it('deleteImages posts the filenames and returns deleted/errors', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_5' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('5') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -204,7 +216,8 @@ describe('useApi', () => {
   it('deleteImages throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_6' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('6') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500 })
@@ -214,7 +227,8 @@ describe('useApi', () => {
   it('createShareLink posts the filename and returns the share URL', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_7' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('7') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -233,7 +247,8 @@ describe('useApi', () => {
   it('createShareLink throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_8' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('8') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
@@ -243,7 +258,8 @@ describe('useApi', () => {
   it('downloadFile fetches the blob and triggers a browser download', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_9' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('9') }) })
     await auth.login('admin', 'secret')
 
     const blob = new Blob(['content'])
@@ -266,7 +282,8 @@ describe('useApi', () => {
   it('downloadFile throws when the response is not ok', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_10' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('10') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
@@ -276,7 +293,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress reports progress and resolves with the uploaded file', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_11' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('11') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -304,8 +322,10 @@ describe('useApi', () => {
       (pct) => progressUpdates.push(pct),
     )
 
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
+
     const xhr = FakeXHR.instances[0]
-    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer tok_11')
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Authorization', `Bearer ${jeton('11')}`)
     xhr.onProgress?.({ lengthComputable: true, loaded: 50, total: 100 })
 
     xhr.status = 201
@@ -320,7 +340,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress ignores progress events with no computable length', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_11b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('11b') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -347,6 +368,7 @@ describe('useApi', () => {
       new File(['data'], 'photo.jpg'),
       (pct) => progressUpdates.push(pct),
     )
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.onProgress?.({ lengthComputable: false, loaded: 50, total: 100 })
 
@@ -361,7 +383,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress rejects on a network error', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_12' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('12') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -379,6 +402,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'photo.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.listeners['error']?.forEach(cb => cb())
 
@@ -388,7 +412,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress surfaces the duplicate-file message on a 409', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('13') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -408,6 +433,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'copy.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.status = 409
     xhr.responseText = JSON.stringify({ error: 'Ce fichier existe déjà ("plage.jpg")', duplicateOf: 'plage.jpg' })
@@ -418,7 +444,7 @@ describe('useApi', () => {
 
   it('uploadImageWithProgress logs out and rejects on a 401', async () => {
     const { auth, api } = setup()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_14' }) })
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('14') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -438,6 +464,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.status = 401
     xhr.listeners['load']?.forEach(cb => cb())
@@ -449,7 +476,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress rejects with a generic message when the 201 body is malformed', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('15') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -469,6 +497,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.status = 201
     xhr.responseText = 'not json'
@@ -480,7 +509,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress falls back to a status-code message when the error body is malformed', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('16') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -500,6 +530,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.status = 500
     xhr.responseText = 'not json'
@@ -511,7 +542,8 @@ describe('useApi', () => {
   it('uploadImageWithProgress falls back to a status-code message when the error body has no error field', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('16b') }) })
     await auth.login('admin', 'secret')
 
     class FakeXHR {
@@ -531,6 +563,7 @@ describe('useApi', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
 
     const uploadPromise = api.uploadImageWithProgress(new File(['data'], 'x.jpg'), () => {})
+    await flushPromises() // le jeton est vérifié (et au besoin renouvelé) avant de créer la requête
     const xhr = FakeXHR.instances[0]
     xhr.status = 500
     xhr.responseText = '{}'
@@ -542,7 +575,8 @@ describe('useApi', () => {
   it('getApiKeys requests the right URL and returns the keys array', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('13') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -559,7 +593,8 @@ describe('useApi', () => {
   it('getApiKeys throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_13b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('13b') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401 })
@@ -569,7 +604,8 @@ describe('useApi', () => {
   it('createApiKey posts the name and returns the created key', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_14' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('14') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({
@@ -587,7 +623,8 @@ describe('useApi', () => {
   it('createApiKey throws the server error message on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('15') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'name required' }) })
@@ -597,7 +634,8 @@ describe('useApi', () => {
   it('createApiKey falls back to a generic message when the server sends none', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_15b' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('15b') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) })
@@ -607,7 +645,8 @@ describe('useApi', () => {
   it('deleteApiKey sends a DELETE to the right URL', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_16' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('16') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: true })
@@ -620,7 +659,8 @@ describe('useApi', () => {
   it('deleteApiKey throws on failure', async () => {
     const { auth, api } = setup()
     auth.logout()
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'tok_17' }) })
+    fetchMock.mockClear() // logout() appelle /api/auth/logout : on repart d'un journal d'appels vide
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ token: jeton('17') }) })
     await auth.login('admin', 'secret')
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
