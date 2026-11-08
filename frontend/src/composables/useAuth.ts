@@ -59,12 +59,13 @@ export function useAuth() {
     await router.push({ name: 'files' })
   }
 
-  function logout(expired = false): void {
+  async function logout(expired = false): Promise<void> {
     token.value = null
     localStorage.removeItem('auth_token')
-    // Efface aussi le cookie de session, sinon la connexion se rouvrirait toute seule.
-    try { void Promise.resolve(fetch('/api/auth/logout', { method: 'POST' })).catch(() => {}) } catch { /* hors ligne */ }
-    router.push({ name: 'login', query: expired ? { expired: '1' } : {} })
+    // Efface aussi le cookie de session, et attend que ce soit fait : sinon le garde de navigation le
+    // réutiliserait aussitôt pour reconnecter la personne qui vient de se déconnecter.
+    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* hors ligne : le cookie expirera */ }
+    await router.push({ name: 'login', query: expired ? { expired: '1' } : {} })
   }
 
   function authHeaders(): Record<string, string> {
