@@ -90,7 +90,7 @@ jobs:
       # le commentaire dans backend/Dockerfile. Aucun risque de mismatch
       # d'architecture : aucune dépendance ne compile de binaire natif ici
       # (l'addon optionnel de ssh2 retombe sur son fallback JS, vérifié).
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v3
 
       - name: Connexion à GHCR
