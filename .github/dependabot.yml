@@ -38,6 +38,10 @@ updates:
     open-pull-requests-limit: 5
   - package-ecosystem: docker
     directory: "/frontend"
+    ignore:
+      # Node 26 : l'extraction EXIF du backend change de comportement (tests en échec) ; on reste sur Node 24 (LTS), comme Alpine 3.24
+      - dependency-name: node
+        versions: [">=25"]
     schedule:
       interval: weekly
       day: monday
