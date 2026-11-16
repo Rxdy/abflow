@@ -112,3 +112,11 @@ Idées non implémentées : multi-compte avec espaces de stockage cloisonnés pa
 utilisateur, système de sauvegarde pour la maintenance. Suivi personnel du
 projet (backlog, historique des phases, audits) dans `.perso/`, séparé du
 code pour ne pas polluer la racine du repo.
+
+## Publier une version
+
+```
+scripts/release.sh 1.4.0
+```
+
+Depuis `main` à jour et propre : pose le tag `v1.4.0` et le pousse. La CI teste, construit les images (`:v1.4.0` et `:latest`) puis crée la Release GitHub avec ses notes ; Watchtower installe la nouvelle image sur le Pi. **Un simple push sur `main` ne déploie rien.** Pour figer une version sur le Pi, mettre l'image en `:v1.4.0` au lieu de `:latest` dans son compose.
