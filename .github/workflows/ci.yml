@@ -91,7 +91,7 @@ jobs:
       # d'architecture : aucune dépendance ne compile de binaire natif ici
       # (l'addon optionnel de ssh2 retombe sur son fallback JS, vérifié).
       - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Connexion à GHCR
         uses: docker/login-action@v3
