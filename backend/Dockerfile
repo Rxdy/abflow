@@ -5,7 +5,7 @@
 # l'addon optionnel de ssh2, échoue silencieusement à se compiler faute de
 # toolchain dans l'image et retombe sur son fallback pur JS — vérifié, aucun
 # fichier .node dans node_modules après install).
-FROM --platform=$BUILDPLATFORM alpine:3.19 AS build
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS build
 RUN apk add --no-cache nodejs npm
 WORKDIR /app
 COPY package*.json ./
@@ -16,7 +16,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # fait ~118 Mo pour un résultat fonctionnellement identique (vérifié : login
 # bcrypt+JWT, ssh2-sftp-client se chargent correctement). npm n'est pas
 # nécessaire à l'exécution, seulement node.
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache nodejs && \
     addgroup -g 1000 app && \
     adduser -D -u 1000 -G app app
