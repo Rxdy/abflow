@@ -213,7 +213,7 @@ export async function createApp() {
     next()
   })
   app.use(cors(corsOptions))
-  app.options('*', cors(corsOptions))
+  app.options('/{*chemin}', cors(corsOptions)) // Express 5 : le joker s'écrit /{*nom}
   app.use(express.json({ limit: '1mb' }))
 
   // ── Rate limiting ───────────────────────────────────────────────────────────

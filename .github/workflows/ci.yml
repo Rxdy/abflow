@@ -13,10 +13,10 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '26'
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
@@ -28,10 +28,10 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '26'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -42,10 +42,10 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '26'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -55,7 +55,7 @@ jobs:
       - run: make e2e
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/test-results/
@@ -78,7 +78,7 @@ jobs:
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Le build npm (frontend : npm install + vue-tsc + vite build ; backend :
       # npm ci) tourne nativement sur le runner amd64 grâce à
@@ -90,11 +90,11 @@ jobs:
       # le commentaire dans backend/Dockerfile. Aucun risque de mismatch
       # d'architecture : aucune dépendance ne compile de binaire natif ici
       # (l'addon optionnel de ssh2 retombe sur son fallback JS, vérifié).
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
 
       - name: Connexion à GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

@@ -15,6 +15,10 @@ updates:
         update-types: [minor, patch]
   - package-ecosystem: npm
     directory: "/frontend"
+    ignore:
+      # jsdom 31 casse la simulation d'envoi de fichiers dans tests/views/UploadView.spec.ts : à revoir avec ces tests
+      - dependency-name: jsdom
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly
       day: monday
