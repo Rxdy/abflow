@@ -62,4 +62,4 @@ e2e-down:
 	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml down
 
 release: ## Publie une version : make release V=1.0.0 (tag vX.Y.Z sur main, déjà en prod ; la CI pose la version sur les images et crée la release)
-	@.github/images/release.sh "$(V)"
+	@scripts/release.sh "$(V)"
