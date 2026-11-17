@@ -1,4 +1,4 @@
-.PHONY: help up down dev https status funnel e2e e2e-down
+.PHONY: help up down dev https status funnel e2e e2e-down release
 
 help:
 	@echo "Commands:"
@@ -60,3 +60,6 @@ e2e:
 
 e2e-down:
 	docker compose -p abflow-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml down
+
+release: ## Publie une version : make release V=1.0.0 (tag vX.Y.Z sur main, déjà en prod ; la CI pose la version sur les images et crée la release)
+	@.github/images/release.sh "$(V)"

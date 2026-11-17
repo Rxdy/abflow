@@ -1,0 +1,22 @@
+{
+  "projet": "abflow",
+  "plateformes": "linux/arm64",
+  "services": {
+    "backend": {
+      "image": "abflow-backend",
+      "contexte": "backend",
+      "dockerfile": "backend/Dockerfile",
+      "sources": [
+        "backend"
+      ]
+    },
+    "frontend": {
+      "image": "abflow-frontend",
+      "contexte": "frontend",
+      "dockerfile": "frontend/Dockerfile",
+      "sources": [
+        "frontend"
+      ]
+    }
+  }
+}

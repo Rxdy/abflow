@@ -1,11 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*.*.*"]
+  # Tests : sur chaque PR, et appelés par images.yml avant le build qui suit une fusion dans dev
   pull_request:
-    branches: [main]
+  workflow_call:
 
 jobs:
   backend:
@@ -60,72 +58,3 @@ jobs:
         with:
           name: playwright-report
           path: frontend/test-results/
-
-  build-and-push:
-    name: Build & push des images (GHCR)
-    runs-on: ubuntu-latest
-    needs: [backend, frontend, e2e]
-    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v'))
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        include:
-          - service: backend
-            context: ./backend
-            dockerfile: ./backend/Dockerfile
-          - service: frontend
-            context: ./frontend
-            dockerfile: ./frontend/Dockerfile
-    steps:
-      - uses: actions/checkout@v7
-
-      # Le build npm (frontend : npm install + vue-tsc + vite build ; backend :
-      # npm ci) tourne nativement sur le runner amd64 grâce à
-      # --platform=$BUILDPLATFORM dans les deux Dockerfile — sans ça, buildx
-      # exécutait ce travail sous émulation QEMU arm64. Pour le frontend
-      # c'était juste lent (~1 min → 13+ min pour des artefacts HTML/CSS/JS
-      # indépendants de l'architecture). Pour le backend c'était pire : npm ci
-      # plantait de façon non-déterministe sous QEMU (exit 132, SIGILL) — voir
-      # le commentaire dans backend/Dockerfile. Aucun risque de mismatch
-      # d'architecture : aucune dépendance ne compile de binaire natif ici
-      # (l'addon optionnel de ssh2 retombe sur son fallback JS, vérifié).
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Connexion à GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Nom d'image (en minuscules)
-        id: image
-        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/abflow-${{ matrix.service }}" >> "$GITHUB_OUTPUT"
-
-      - name: Build et push
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:latest
-            ${{ steps.image.outputs.name }}:${{ github.ref_name }}
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
-
-  release:
-    name: Release GitHub
-    needs: build-and-push
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Release avec les notes générées depuis la version précédente
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --generate-notes --verify-tag
